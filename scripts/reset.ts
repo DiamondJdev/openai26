@@ -1,9 +1,18 @@
 import { getEnv } from "@/lib/config/env";
-import { resolveDataPaths } from "@/lib/config/paths";
-import { purgeData } from "@/lib/cleanup/purge";
+import { createNeonDatabase } from "@/lib/db/connection";
+import { applyMigrations } from "@/lib/db/migrations";
 
-// Wipe all demo data (db, frames, crops, uploads). Run with `npm run reset`.
-const env = getEnv();
-const paths = resolveDataPaths(env.dataDir, env.dbPath);
-purgeData(paths);
-process.stdout.write(`Purged ClaimLens data under ${paths.root}\n`);
+// The historical reset command now safely applies schema migrations only.
+async function main(): Promise<void> {
+  const env = getEnv();
+  if (!env.databaseUrl.trim()) throw new Error("DATABASE_URL is required");
+  const db = createNeonDatabase(env.databaseUrl);
+  try {
+    await applyMigrations(db);
+    process.stdout.write("ClaimLens schema is ready; no production data was removed.\n");
+  } finally {
+    await db.close();
+  }
+}
+
+await main();

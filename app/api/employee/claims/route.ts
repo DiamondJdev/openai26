@@ -9,13 +9,13 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const ctx = getAppContext();
+  const ctx = await getAppContext();
   const claims = listClaims(ctx.db).map((c) => claimSummary(ctx, c));
   return ok({ claims });
 }
 
 export async function POST(req: NextRequest) {
-  const ctx = getAppContext();
+  const ctx = await getAppContext();
   try {
     const body = (await req.json().catch(() => ({}))) as {
       plate?: unknown;

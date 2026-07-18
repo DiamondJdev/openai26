@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 /** State-appropriate customer view for the current session. */
 export async function GET(req: NextRequest) {
-  const ctx = getAppContext();
+  const ctx = await getAppContext();
   const claimId = readSessionClaimId(req, ctx);
   if (!claimId) return fail("Your session has expired. Re-enter your PIN.", 401);
   try {

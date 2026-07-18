@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 /** Establish a customer session from the link token + PIN (throttled). */
 export async function POST(req: NextRequest) {
-  const ctx = getAppContext();
+  const ctx = await getAppContext();
   try {
     const body = (await req.json().catch(() => ({}))) as {
       token?: unknown;

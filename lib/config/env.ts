@@ -21,8 +21,6 @@ export function getEnv() {
     model: process.env.CLAIMLENS_MODEL ?? "gpt-5.6",
     publicBaseUrl: resolvePublicBaseUrl(process.env),
     databaseUrl: process.env.DATABASE_URL ?? "",
-    dataDir: process.env.CLAIMLENS_DATA_DIR ?? ".data",
-    dbPath: process.env.CLAIMLENS_DB_PATH ?? "",
     manifestPath: process.env.CLAIMLENS_MANIFEST_PATH ?? "fixtures/manifest.json",
     // Env may only tighten the guardrails, never exceed the hard caps.
     maxInvestigationMs: Math.min(

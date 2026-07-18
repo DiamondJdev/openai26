@@ -19,7 +19,7 @@ function str(form: FormData, key: string): string {
 
 /** Submit the customer intake packet (multipart: profile fields + 3 photos). */
 export async function POST(req: NextRequest) {
-  const ctx = getAppContext();
+  const ctx = await getAppContext();
   const claimId = readSessionClaimId(req, ctx);
   if (!claimId) return fail("Your session has expired. Re-enter your PIN.", 401);
 

@@ -4,8 +4,8 @@ import path from "node:path";
 import sharp from "sharp";
 import type { AppContext } from "@/lib/runtime/context";
 import { openMemoryDatabase } from "@/lib/db/connection";
-import { resolveDataPaths } from "@/lib/config/paths";
-import { ensureDataDirs } from "@/lib/cleanup/purge";
+import { resolveLegacyArtifactPaths } from "@/lib/config/paths";
+import { createInMemoryArtifactStore } from "@/lib/storage/artifacts";
 import { insertVisit } from "@/lib/db/repositories/visits";
 
 export interface AppHarness {
@@ -31,8 +31,10 @@ export async function buildAppHarness(
   await writePng(path.join(footageRoot, "v", "mid.png"), "#345612");
   await writePng(path.join(footageRoot, "v", "exit.png"), "#561234");
 
-  const paths = resolveDataPaths(path.join(tmp, "data"));
-  ensureDataDirs(paths);
+  const paths = resolveLegacyArtifactPaths(path.join(tmp, "data"));
+  fs.mkdirSync(paths.uploads, { recursive: true });
+  fs.mkdirSync(paths.frames, { recursive: true });
+  fs.mkdirSync(paths.crops, { recursive: true });
   const db = openMemoryDatabase();
 
   insertVisit(db, {
@@ -48,7 +50,8 @@ export async function buildAppHarness(
   });
 
   const ctx: AppContext = {
-    db,
+    db: db as unknown as AppContext["db"],
+    artifacts: createInMemoryArtifactStore(),
     paths,
     footageRoot,
     sessionSecret: "test-secret-please-change",
@@ -58,8 +61,6 @@ export async function buildAppHarness(
       model: "gpt-5.6",
       publicBaseUrl: "http://localhost:3000",
       databaseUrl: "",
-      dataDir: paths.root,
-      dbPath: paths.db,
       manifestPath: "",
       maxInvestigationMs: 45_000,
     },

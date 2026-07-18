@@ -13,7 +13,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const ctx = getAppContext();
+  const ctx = await getAppContext();
   if (!getClaimById(ctx.db, id)) return fail("Claim not found.", 404);
   try {
     const body = await req.json().catch(() => ({}));

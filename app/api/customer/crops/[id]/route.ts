@@ -18,7 +18,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const ctx = getAppContext();
+  const ctx = await getAppContext();
   const claimId = readSessionClaimId(req, ctx);
   if (!claimId) return fail("Not found.", 404);
 

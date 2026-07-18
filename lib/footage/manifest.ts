@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { z } from "zod";
-import type { DB } from "@/lib/db/connection";
+import type { Database, DB } from "@/lib/db/connection";
 import { CAMERA_IDS } from "@/lib/domain/cameras";
 import { VEHICLE_TYPES } from "@/lib/domain/vehicle";
 import { insertVisit } from "@/lib/db/repositories/visits";
@@ -78,8 +79,18 @@ function toSources(visit: ManifestVisit): FootageSources {
   return sources;
 }
 
-/** Seed the visits table from a validated manifest. Returns count inserted. */
-export function seedFromManifest(db: DB, manifest: FootageManifest): number {
+function seedVisitId(visit: ManifestVisit, sources: FootageSources): string {
+  const identity = JSON.stringify({
+    plateNormalized: normalizePlate(visit.plate),
+    plateDisplay: visit.plate,
+    vehicleType: visit.vehicleType,
+    occurredAt: visit.occurredAt,
+    sources,
+  });
+  return `visit_seed_${createHash("sha256").update(identity).digest("hex")}`;
+}
+
+function seedLegacyManifest(db: DB, manifest: FootageManifest): number {
   let count = 0;
   for (const visit of manifest.visits) {
     insertVisit(db, {
@@ -92,4 +103,59 @@ export function seedFromManifest(db: DB, manifest: FootageManifest): number {
     count += 1;
   }
   return count;
+}
+
+async function seedDatabaseManifest(
+  db: Database,
+  manifest: FootageManifest,
+): Promise<number> {
+  let count = 0;
+  for (const visit of manifest.visits) {
+    const sources = toSources(visit);
+    const id = seedVisitId(visit, sources);
+    const existing = await db.query<{ id: string }>(
+      "SELECT id FROM visits WHERE id = $1",
+      [id],
+    );
+    if (existing.length > 0) continue;
+
+    await db.query(
+      `INSERT INTO visits (id, plate_normalized, plate_display, vehicle_type, occurred_at, sources)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        id,
+        normalizePlate(visit.plate),
+        visit.plate,
+        visit.vehicleType,
+        visit.occurredAt,
+        JSON.stringify(sources),
+      ],
+    );
+    count += 1;
+  }
+  return count;
+}
+
+function isAsyncDatabase(db: Database | DB): db is Database {
+  return "query" in db;
+}
+
+/**
+ * Seed visits from a validated manifest. The Neon path is async and inserts
+ * only deterministic, previously unseen fixture visits; the synchronous
+ * SQLite overload remains for pre-Task-4 test and repository compatibility.
+ */
+export function seedFromManifest(db: DB, manifest: FootageManifest): number;
+export function seedFromManifest(
+  db: Database,
+  manifest: FootageManifest,
+): Promise<number>;
+export function seedFromManifest(
+  db: Database | DB,
+  manifest: FootageManifest,
+): number | Promise<number> {
+  return isAsyncDatabase(db)
+    ? seedDatabaseManifest(db, manifest)
+    : seedLegacyManifest(db, manifest);
 }

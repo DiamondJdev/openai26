@@ -12,7 +12,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const ctx = getAppContext();
+  const ctx = await getAppContext();
   const upload = getUploadById(ctx.db, id);
   if (!upload || !fs.existsSync(upload.storedPath)) {
     return fail("Not found.", 404);
