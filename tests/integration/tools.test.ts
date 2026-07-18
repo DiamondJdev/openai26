@@ -13,8 +13,8 @@ let h: ToolHarness;
 beforeEach(async () => {
   h = await buildToolHarness();
 });
-afterEach(() => {
-  h.cleanup();
+afterEach(async () => {
+  await h.cleanup();
 });
 
 async function extract(camera: string, ts: number): Promise<string> {
@@ -92,10 +92,24 @@ describe("schema + scope enforcement", () => {
 });
 
 describe("tool: extract_frame + analyze_frame", () => {
+  it("rejects a video source before attempting extraction", async () => {
+    h.visit.sources.entrance = { file: "v/entrance.png", kind: "video" };
+
+    const result = await executeTool(h.ctx, "extract_frame", {
+      camera: "entrance",
+      timestampMs: 0,
+    });
+
+    expect(result.output).toMatchObject({
+      ok: false,
+      reason: "video_unsupported",
+    });
+  });
+
   it("extracts a scoped frame and records a plain-language event", async () => {
     const frameId = await extract("entrance", 11_000);
     expect(frameId).toMatch(/^frame_/);
-    const events = listEventsByClaim(h.db, h.claim.id);
+    const events = await listEventsByClaim(h.db, h.claim.id);
     expect(events.some((e) => e.type === "tool_result")).toBe(true);
   });
 
@@ -151,7 +165,7 @@ describe("tool: save_finding", () => {
       evidenceFrameIds: [frameId],
     });
     const { findingId } = res.output as { findingId: string };
-    const finding = getFindingById(h.db, findingId);
+    const finding = await getFindingById(h.db, findingId);
     expect(finding?.bbox).toEqual({ x: 0.3, y: 0.4, w: 0.2, h: 0.2 });
   });
 });
@@ -182,10 +196,10 @@ describe("tool: generate_report", () => {
     const res = await executeTool(h.ctx, "generate_report", {});
     expect(res.terminal).toBe("review_ready");
 
-    const report = getReportByClaimId(h.db, h.claim.id);
+    const report = await getReportByClaimId(h.db, h.claim.id);
     expect(report?.outcome).toBe("no_new_damage_detected");
     // every timeline entry cites a frame
     expect(report?.timeline.every((t) => t.frameId)).toBe(true);
-    expect(getClaimByIdOrThrow(h.db, h.claim.id).reportId).toBe(report?.id);
+    expect((await getClaimByIdOrThrow(h.db, h.claim.id)).reportId).toBe(report?.id);
   });
 });

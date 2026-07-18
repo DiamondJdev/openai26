@@ -15,28 +15,21 @@ export function isInvestigationRunning(claimId: string): boolean {
  * live trace by polling events. Guards against double-starts and converts any
  * unexpected failure into a recorded error + manual-review hold.
  */
-export function launchInvestigation(ctx: AppContext, claimId: string): void {
+export async function launchInvestigation(ctx: AppContext, claimId: string): Promise<void> {
   if (running.has(claimId)) return;
   running.add(claimId);
-  void startInvestigation(ctx, claimId)
-    .catch((error: unknown) => {
-      const message =
-        error instanceof Error ? error.message : "Investigation failed.";
-      try {
-        appendEvent(ctx.db, {
-          claimId,
-          type: "error",
-          plainLanguage: "The investigation could not be completed.",
-        });
-        const claim = getClaimById(ctx.db, claimId);
-        if (claim && claim.status !== "released") {
-          holdForManualReview(ctx.db, claimId, message);
-        }
-      } catch {
-        // best-effort cleanup; nothing else we can safely do here
-      }
-    })
-    .finally(() => {
-      running.delete(claimId);
-    });
+  try {
+    await startInvestigation(ctx, claimId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Investigation failed.";
+    try {
+      await appendEvent(ctx.db, { claimId, type: "error", plainLanguage: "The investigation could not be completed." });
+      const claim = await getClaimById(ctx.db, claimId);
+      if (claim && claim.status !== "released") await holdForManualReview(ctx.db, claimId, message);
+    } catch {
+      // best-effort cleanup; nothing else we can safely do here
+    }
+  } finally {
+    running.delete(claimId);
+  }
 }

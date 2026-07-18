@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
       files,
     });
 
-    return ok({ view: getCustomerView(ctx, claimId) });
+    return ok({ view: await getCustomerView(ctx, claimId) });
   } catch (error) {
     return handleError(error);
   }

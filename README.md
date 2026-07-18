@@ -18,20 +18,22 @@ One local Next.js/TypeScript app covers the full claim lifecycle:
 ## Stack
 
 - Next.js (App Router) + TypeScript + Tailwind — one app, one deploy target.
-- SQLite via `better-sqlite3`; footage/frames/uploads on local disk.
+- Neon Postgres for claims and private Vercel Blob for uploads, frames, and crops.
 - OpenAI Responses API (GPT-5.6) with function tools for the agent + vision.
-- `ffmpeg` for frame extraction, `sharp` for re-encoding and crops.
+- Still-image fixture sources plus `sharp` for re-encoding and crops.
 
 ## Prerequisites
 
-- Node 20+ and `ffmpeg` on PATH.
-- An OpenAI API key with GPT-5.6 vision + Responses tool calling.
+- Node 20+.
+- A Neon `DATABASE_URL` and Blob credentials (`BLOB_READ_WRITE_TOKEN` locally,
+  or Vercel OIDC/store credentials when deployed).
+- An OpenAI API key with GPT-5.6 vision + Responses tool calling for live runs.
 
 ## Setup
 
 ```bash
 npm install
-cp .env.example .env.local   # set OPENAI_API_KEY (and CLAIMLENS_MODEL if needed)
+cp .env.example .env.local   # set DATABASE_URL, Blob credentials, and OPENAI_API_KEY
 ```
 
 Drop the before/after wash images under `fixtures/footage/` and point
@@ -41,16 +43,13 @@ Drop the before/after wash images under `fixtures/footage/` and point
 
 ```bash
 npm run dev      # http://localhost:3000  → /employee for the console
-npm run reset    # wipe all demo data (also happens automatically on startup)
-npm run seed     # reset + re-seed the visit index from the manifest
+npm run reset    # explicitly wipe ClaimLens database rows and private artifacts
+npm run seed     # idempotently seed manifest visits into Neon
 ```
 
-For a remote demo, tunnel with ngrok and set `CLAIMLENS_PUBLIC_BASE_URL` to the
-tunnel URL so generated customer links are reachable. **When tunneling, also set
-`EMPLOYEE_ACCESS_TOKEN`** — exposing the customer link exposes the employee
-routes too, and that token gates `/employee` + `/api/employee/*` behind HTTP
-Basic auth (any username, password = the token). It is off by default for
-trusted local use.
+Set `CLAIMLENS_PUBLIC_BASE_URL` to the deployed app URL so generated customer
+links are reachable. Employee access is configured with `EMPLOYEE_USERNAME` and
+`EMPLOYEE_PASSWORD`.
 
 ## Test & verify
 
@@ -68,5 +67,6 @@ npm run build
 - The manager note is passed to the model as untrusted data, never instructions;
   every model tool argument is schema-validated and scoped to the claim.
 - Reports are generated only from findings that cite stored evidence.
-- All demo data (DB, frames, crops, uploads) is purged on startup/reset — no
-  claim data survives a session.
+- Artifact pathnames remain private under `claimlens/`; image bytes are served
+  only after the appropriate customer or employee authorization check.
+- No startup purge occurs. `npm run reset` is an explicit destructive operation.

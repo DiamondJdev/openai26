@@ -1,4 +1,4 @@
-import type { DB } from "../connection";
+import type { Database } from "../connection";
 import type { Claim } from "@/lib/domain/models";
 import type { ClaimStatus } from "@/lib/domain/claim-status";
 import type { DamageRegion } from "@/lib/domain/regions";
@@ -14,7 +14,7 @@ interface ClaimRow {
   selected_regions: string;
   manager_note: string;
   report_id: string | null;
-  share_evidence_crops: number;
+  share_evidence_crops: boolean;
   released_at: string | null;
   manual_review_reason: string | null;
   created_at: string;
@@ -30,12 +30,18 @@ function mapRow(row: ClaimRow): Claim {
     selectedRegions: JSON.parse(row.selected_regions) as DamageRegion[],
     managerNote: row.manager_note,
     reportId: row.report_id,
-    shareEvidenceCrops: row.share_evidence_crops === 1,
+    shareEvidenceCrops: row.share_evidence_crops,
     releasedAt: row.released_at,
     manualReviewReason: row.manual_review_reason,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function required(rows: readonly ClaimRow[], id: string): Claim {
+  const row = rows[0];
+  if (!row) throw new Error(`Claim not found: ${id}`);
+  return mapRow(row);
 }
 
 export interface NewClaim {
@@ -45,108 +51,91 @@ export interface NewClaim {
   readonly managerNote: string;
 }
 
-export function insertClaim(db: DB, input: NewClaim): Claim {
-  const ts = nowIso();
+export async function insertClaim(db: Database, input: NewClaim): Promise<Claim> {
   const id = newId("claim");
-  db.prepare(
+  const ts = nowIso();
+  const rows = await db.query<ClaimRow>(
     `INSERT INTO claims (id, visit_id, status, vehicle_type, selected_regions,
-        manager_note, share_evidence_crops, created_at, updated_at)
-     VALUES (@id, @visitId, 'draft', @vehicleType, @selectedRegions,
-        @managerNote, 0, @ts, @ts)`,
-  ).run({
-    id,
-    visitId: input.visitId,
-    vehicleType: input.vehicleType,
-    selectedRegions: JSON.stringify(input.selectedRegions),
-    managerNote: input.managerNote,
-    ts,
-  });
-  return getClaimByIdOrThrow(db, id);
+      manager_note, share_evidence_crops, created_at, updated_at)
+     VALUES ($1, $2, 'draft', $3, $4, $5, FALSE, $6, $6)
+     RETURNING *`,
+    [id, input.visitId, input.vehicleType, JSON.stringify(input.selectedRegions), input.managerNote, ts],
+  );
+  return required(rows, id);
 }
 
-export function getClaimById(db: DB, id: string): Claim | null {
-  const row = db.prepare("SELECT * FROM claims WHERE id = ?").get(id) as
-    ClaimRow | undefined;
-  return row ? mapRow(row) : null;
+export async function getClaimById(db: Database, id: string): Promise<Claim | null> {
+  const rows = await db.query<ClaimRow>("SELECT * FROM claims WHERE id = $1", [id]);
+  return rows[0] ? mapRow(rows[0]) : null;
 }
 
-export function getClaimByIdOrThrow(db: DB, id: string): Claim {
-  const claim = getClaimById(db, id);
+export async function getClaimByIdOrThrow(db: Database, id: string): Promise<Claim> {
+  const claim = await getClaimById(db, id);
   if (!claim) throw new Error(`Claim not found: ${id}`);
   return claim;
 }
 
 /** Live queue, newest first. */
-export function listClaims(db: DB): Claim[] {
-  const rows = db
-    .prepare("SELECT * FROM claims ORDER BY created_at DESC, id DESC")
-    .all() as ClaimRow[];
-  return rows.map(mapRow);
+export async function listClaims(db: Database): Promise<Claim[]> {
+  return (await db.query<ClaimRow>("SELECT * FROM claims ORDER BY created_at DESC, id DESC")).map(mapRow);
 }
 
-export function updateClaimStatus(
-  db: DB,
-  id: string,
-  status: ClaimStatus,
-): Claim {
-  db.prepare(
-    "UPDATE claims SET status = @status, updated_at = @ts WHERE id = @id",
-  ).run({ id, status, ts: nowIso() });
-  return getClaimByIdOrThrow(db, id);
+export async function updateClaimStatus(db: Database, id: string, status: ClaimStatus): Promise<Claim> {
+  const rows = await db.query<ClaimRow>(
+    "UPDATE claims SET status = $1, updated_at = $2 WHERE id = $3 RETURNING *",
+    [status, nowIso(), id],
+  );
+  return required(rows, id);
 }
 
-export function setClaimSelection(
-  db: DB,
+export async function setClaimSelection(
+  db: Database,
   id: string,
   vehicleType: VehicleType,
   selectedRegions: readonly DamageRegion[],
-): Claim {
-  db.prepare(
-    `UPDATE claims SET vehicle_type = @vehicleType,
-        selected_regions = @selectedRegions, updated_at = @ts WHERE id = @id`,
-  ).run({
-    id,
-    vehicleType,
-    selectedRegions: JSON.stringify(selectedRegions),
-    ts: nowIso(),
-  });
-  return getClaimByIdOrThrow(db, id);
+): Promise<Claim> {
+  const rows = await db.query<ClaimRow>(
+    `UPDATE claims SET vehicle_type = $1, selected_regions = $2, updated_at = $3
+     WHERE id = $4 RETURNING *`,
+    [vehicleType, JSON.stringify(selectedRegions), nowIso(), id],
+  );
+  return required(rows, id);
 }
 
-/**
- * Low-level status mutator. Callers are responsible for validating the
- * transition (assertTransition) — this is only reached from the investigation
- * loop/compiler, which run exclusively from the `investigating` state.
- */
-export function attachReport(
-  db: DB,
+/** Low-level status mutator for the investigation loop/compiler. */
+export async function attachReport(
+  db: Database,
   id: string,
   reportId: string,
   status: ClaimStatus,
-): Claim {
-  db.prepare(
-    "UPDATE claims SET report_id = @reportId, status = @status, updated_at = @ts WHERE id = @id",
-  ).run({ id, reportId, status, ts: nowIso() });
-  return getClaimByIdOrThrow(db, id);
+): Promise<Claim> {
+  const rows = await db.query<ClaimRow>(
+    `UPDATE claims SET report_id = $1, status = $2, updated_at = $3
+     WHERE id = $4 RETURNING *`,
+    [reportId, status, nowIso(), id],
+  );
+  return required(rows, id);
 }
 
-export function releaseClaim(
-  db: DB,
+export async function releaseClaim(
+  db: Database,
   id: string,
   shareEvidenceCrops: boolean,
-): Claim {
+): Promise<Claim> {
   const ts = nowIso();
-  db.prepare(
-    `UPDATE claims SET status = 'released', share_evidence_crops = @share,
-        released_at = @ts, updated_at = @ts WHERE id = @id`,
-  ).run({ id, share: shareEvidenceCrops ? 1 : 0, ts });
-  return getClaimByIdOrThrow(db, id);
+  const rows = await db.query<ClaimRow>(
+    `UPDATE claims SET status = 'released', share_evidence_crops = $1,
+      released_at = $2, updated_at = $2 WHERE id = $3 RETURNING *`,
+    [shareEvidenceCrops, ts, id],
+  );
+  return required(rows, id);
 }
 
-export function holdForManualReview(db: DB, id: string, reason: string): Claim {
-  db.prepare(
-    `UPDATE claims SET status = 'manual_review_required',
-        manual_review_reason = @reason, updated_at = @ts WHERE id = @id`,
-  ).run({ id, reason, ts: nowIso() });
-  return getClaimByIdOrThrow(db, id);
+export async function holdForManualReview(db: Database, id: string, reason: string): Promise<Claim> {
+  const rows = await db.query<ClaimRow>(
+    `UPDATE claims SET status = 'manual_review_required', manual_review_reason = $1,
+      updated_at = $2 WHERE id = $3 RETURNING *`,
+    [reason, nowIso(), id],
+  );
+  return required(rows, id);
 }

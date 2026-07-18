@@ -1,24 +1,15 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import type { Database, DB } from "@/lib/db/connection";
+import type { Database } from "@/lib/db/connection";
 import { createNeonDatabase } from "@/lib/db/connection";
 import { getEnv, type AppEnv } from "@/lib/config/env";
-import type { LegacyArtifactPaths } from "@/lib/config/paths";
 import { applyMigrations } from "@/lib/db/migrations";
 import { loadManifest, seedFromManifest } from "@/lib/footage/manifest";
 import { PrivateBlobArtifactStore, type ArtifactStore } from "@/lib/storage/artifacts";
 
-/**
- * Transitional type only: Task 4 will remove the legacy synchronous database
- * and local-artifact call sites. Production initialization stores a Neon port.
- */
-type LegacyDatabaseBridge = Database & DB;
-
 export interface AppContext {
-  readonly db: LegacyDatabaseBridge;
+  readonly db: Database;
   readonly artifacts: ArtifactStore;
-  /** @deprecated Retained for the pre-Task-4 local-file service test harness. */
-  readonly paths: LegacyArtifactPaths;
   readonly footageRoot: string;
   readonly env: AppEnv;
   /** Per-process secret for signing customer session cookies. */
@@ -50,9 +41,8 @@ async function initialize(): Promise<AppContext> {
     // Manifest/footage may not be present yet (added later). The app still boots;
     // plate lookups simply return no visits until footage is seeded.
     return {
-      db: db as LegacyDatabaseBridge,
+      db,
       artifacts,
-      paths: undefined as unknown as LegacyArtifactPaths,
       footageRoot: "",
       env,
       sessionSecret: randomBytes(32).toString("hex"),
@@ -68,11 +58,8 @@ async function initialize(): Promise<AppContext> {
   }
 
   return {
-    // The cast allows the unchanged synchronous callers to type-check during
-    // the staged migration. Task 4 removes this bridge and its paths field.
-    db: db as LegacyDatabaseBridge,
+    db,
     artifacts,
-    paths: undefined as unknown as LegacyArtifactPaths,
     footageRoot,
     env,
     sessionSecret: randomBytes(32).toString("hex"),

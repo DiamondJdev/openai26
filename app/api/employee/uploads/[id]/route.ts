@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import { getAppContext } from "@/lib/runtime/context";
 import { getUploadById } from "@/lib/db/repositories/uploads";
 import { fail } from "@/lib/api/http";
@@ -13,11 +12,12 @@ export async function GET(
 ) {
   const { id } = await params;
   const ctx = await getAppContext();
-  const upload = getUploadById(ctx.db, id);
-  if (!upload || !fs.existsSync(upload.storedPath)) {
+  const upload = await getUploadById(ctx.db, id);
+  if (!upload) {
     return fail("Not found.", 404);
   }
-  const bytes = fs.readFileSync(upload.storedPath);
+  const bytes = await ctx.artifacts.get(upload.storedPath);
+  if (!bytes) return fail("Not found.", 404);
   return new Response(new Uint8Array(bytes), {
     status: 200,
     headers: {

@@ -20,8 +20,8 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
     include: ["tests/**/*.test.{ts,tsx}"],
-    // Native modules (better-sqlite3) are not thread-safe across workers; run
-    // integration suites in a single fork to avoid file-lock contention.
+    // Integration suites use temporary image fixtures; keep them in one fork
+    // to avoid filesystem contention.
     pool: "forks",
   },
 });

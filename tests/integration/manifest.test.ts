@@ -45,7 +45,7 @@ describe("footage manifest", () => {
     }
   });
 
-  it("loads, validates, and seeds visits with normalized plates", () => {
+  it("loads, validates, and seeds visits with normalized plates", async () => {
     const p = writeManifest({
       visits: [
         {
@@ -63,15 +63,16 @@ describe("footage manifest", () => {
     const { manifest, footageRoot } = loadManifest(p);
     expect(footageRoot).toBe(path.resolve(tmp));
 
-    const db = testDb();
-    expect(seedFromManifest(db, manifest)).toBe(1);
+    const db = await testDb();
+    expect(await seedFromManifest(db, manifest)).toBe(1);
 
-    const visit = findLatestVisitByPlate(db, "7GAB991");
+    const visit = await findLatestVisitByPlate(db, "7GAB991");
     expect(visit).not.toBeNull();
     expect(visit?.vehicleType).toBe("car");
     // kind inferred from extension when omitted.
     expect(visit?.sources.entrance?.kind).toBe("video");
     expect(visit?.sources.exit?.kind).toBe("image");
+    await db.close();
   });
 
   it("rejects a manifest that fails schema validation", () => {

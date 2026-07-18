@@ -15,14 +15,14 @@ export async function GET(
 ) {
   const { id } = await params;
   const ctx = await getAppContext();
-  const claim = getClaimById(ctx.db, id);
+  const claim = await getClaimById(ctx.db, id);
   if (!claim) return fail("Claim not found.", 404);
 
   const afterParam = req.nextUrl.searchParams.get("after");
   const after = afterParam ? Number.parseInt(afterParam, 10) : -1;
   const afterSeq = Number.isFinite(after) ? after : -1;
 
-  const events = listEventsAfter(ctx.db, id, afterSeq).map((e) => ({
+  const events = (await listEventsAfter(ctx.db, id, afterSeq)).map((e) => ({
     seq: e.seq,
     type: e.type,
     plainLanguage: e.plainLanguage,

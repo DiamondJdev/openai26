@@ -81,24 +81,24 @@ let h: AppHarness;
 beforeEach(async () => {
   h = await buildAppHarness();
 });
-afterEach(() => {
-  h.cleanup();
+afterEach(async () => {
+  await h.cleanup();
 });
 
 async function driveToReviewReady(managerNote = "Rear bumper scratch complaint.") {
-  const { claim, url, pin } = createClaim(h.ctx, {
+  const { claim, url, pin } = await createClaim(h.ctx, {
     plate: "test 123",
     managerNote,
   });
   const token = tokenFromUrl(url);
 
   // Wrong PIN is rejected; correct PIN starts a session.
-  expect(verifyAndStartSession(h.ctx, token, "000000").ok).toBe(false);
-  const session = verifyAndStartSession(h.ctx, token, pin);
+  expect((await verifyAndStartSession(h.ctx, token, "000000")).ok).toBe(false);
+  const session = await verifyAndStartSession(h.ctx, token, pin);
   expect(session.ok).toBe(true);
 
   // Before submission the customer sees the intake form.
-  expect(getCustomerView(h.ctx, claim.id).state).toBe("intake");
+  expect((await getCustomerView(h.ctx, claim.id)).state).toBe("intake");
 
   const photo = await jpegBuffer();
   await submitIntake(h.ctx, claim.id, {
@@ -112,9 +112,9 @@ async function driveToReviewReady(managerNote = "Rear bumper scratch complaint."
       { kind: "insurance", bytes: photo },
     ],
   });
-  expect(getCustomerView(h.ctx, claim.id).state).toBe("under_review");
+  expect((await getCustomerView(h.ctx, claim.id)).state).toBe("under_review");
 
-  setClaimIntake(h.ctx, claim.id, {
+  await setClaimIntake(h.ctx, claim.id, {
     vehicleType: "car",
     selectedRegions: ["rear_bumper"],
   });
@@ -132,17 +132,15 @@ describe("end-to-end claim lifecycle", () => {
     const { claimId, result, vision } = await driveToReviewReady();
     expect(result.status).toBe("review_ready");
 
-    // Customer uploads NEVER reach the model: every analyzed path is a footage
-    // frame under the frames dir, none is an upload.
+    // Customer uploads NEVER reach the model; only ephemeral frame files are shown.
     expect(vision.paths.length).toBeGreaterThan(0);
-    expect(vision.paths.every((p) => p.startsWith(h.ctx.paths.frames))).toBe(true);
-    expect(vision.paths.some((p) => p.startsWith(h.ctx.paths.uploads))).toBe(false);
+    expect(vision.paths.every((p) => p.includes("claimlens-artifact-"))).toBe(true);
 
     // Before release the customer still only sees "under review".
-    expect(getCustomerView(h.ctx, claimId).state).toBe("under_review");
+    expect((await getCustomerView(h.ctx, claimId)).state).toBe("under_review");
 
-    await releaseReport(h.ctx.db, claimId, { shareEvidenceCrops: false }, h.ctx.paths.crops);
-    const view = getCustomerView(h.ctx, claimId);
+    await releaseReport(h.ctx.db, claimId, { shareEvidenceCrops: false }, h.ctx.artifacts);
+    const view = await getCustomerView(h.ctx, claimId);
     expect(view.state).toBe("released");
     if (view.state !== "released") return;
     expect(view.outcome).toBe("no_new_damage_detected");
@@ -152,8 +150,8 @@ describe("end-to-end claim lifecycle", () => {
 
   it("shares focused crops only when the employee opts in", async () => {
     const { claimId } = await driveToReviewReady();
-    await releaseReport(h.ctx.db, claimId, { shareEvidenceCrops: true }, h.ctx.paths.crops);
-    const view = getCustomerView(h.ctx, claimId);
+    await releaseReport(h.ctx.db, claimId, { shareEvidenceCrops: true }, h.ctx.artifacts);
+    const view = await getCustomerView(h.ctx, claimId);
     expect(view.state).toBe("released");
     if (view.state !== "released") return;
     expect(view.crops.length).toBeGreaterThan(0);
@@ -165,11 +163,11 @@ describe("end-to-end claim lifecycle", () => {
     );
     // Outcome is derived from findings, not the note.
     expect(result.status).toBe("review_ready");
-    await releaseReport(h.ctx.db, claimId, { shareEvidenceCrops: false }, h.ctx.paths.crops);
-    const view = getCustomerView(h.ctx, claimId);
+    await releaseReport(h.ctx.db, claimId, { shareEvidenceCrops: false }, h.ctx.artifacts);
+    const view = await getCustomerView(h.ctx, claimId);
     if (view.state !== "released") throw new Error("expected released");
     expect(view.outcome).toBe("no_new_damage_detected");
     // Still no upload ever reached vision.
-    expect(vision.paths.some((p) => p.startsWith(h.ctx.paths.uploads))).toBe(false);
+    expect(vision.paths.every((p) => p.includes("claimlens-artifact-"))).toBe(true);
   });
 });

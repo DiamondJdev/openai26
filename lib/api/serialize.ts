@@ -9,9 +9,9 @@ import { listEventsByClaim } from "@/lib/db/repositories/events";
 import { listCropsByClaim } from "@/lib/db/repositories/evidence";
 
 /** Compact queue row for the employee live queue. */
-export function claimSummary(ctx: AppContext, claim: Claim) {
-  const visit = getVisitById(ctx.db, claim.visitId);
-  const submission = getSubmissionByClaimId(ctx.db, claim.id);
+export async function claimSummary(ctx: AppContext, claim: Claim) {
+  const visit = await getVisitById(ctx.db, claim.visitId);
+  const submission = await getSubmissionByClaimId(ctx.db, claim.id);
   return {
     id: claim.id,
     status: claim.status,
@@ -28,22 +28,22 @@ export function claimSummary(ctx: AppContext, claim: Claim) {
  * includes the submission, upload references, findings-backed report, and the
  * plain-language investigation trace.
  */
-export function claimDetail(ctx: AppContext, claim: Claim) {
-  const visit = getVisitById(ctx.db, claim.visitId);
-  const submission = getSubmissionByClaimId(ctx.db, claim.id);
-  const uploads = listUploadsByClaim(ctx.db, claim.id).map((u) => ({
+export async function claimDetail(ctx: AppContext, claim: Claim) {
+  const visit = await getVisitById(ctx.db, claim.visitId);
+  const submission = await getSubmissionByClaimId(ctx.db, claim.id);
+  const uploads = (await listUploadsByClaim(ctx.db, claim.id)).map((u) => ({
     id: u.id,
     kind: u.kind,
   }));
-  const report = getReportByClaimId(ctx.db, claim.id);
-  const events = listEventsByClaim(ctx.db, claim.id).map((e) => ({
+  const report = await getReportByClaimId(ctx.db, claim.id);
+  const events = (await listEventsByClaim(ctx.db, claim.id)).map((e) => ({
     seq: e.seq,
     type: e.type,
     plainLanguage: e.plainLanguage,
     detail: e.detail,
     createdAt: e.createdAt,
   }));
-  const crops = listCropsByClaim(ctx.db, claim.id).map((c) => ({
+  const crops = (await listCropsByClaim(ctx.db, claim.id)).map((c) => ({
     id: c.id,
     region: c.region,
     camera: c.camera,

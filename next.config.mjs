@@ -5,8 +5,11 @@ requireDeploymentEnv(process.env);
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Native modules must not be bundled by the Next.js server compiler.
-  serverExternalPackages: ["better-sqlite3", "sharp"],
+  // Sharp is used only for temporary still-image processing.
+  serverExternalPackages: ["sharp"],
+  outputFileTracingIncludes: {
+    "/*": ["./fixtures/**/*"],
+  },
   // Investigation traces stream via SSE; keep responses uncompressed for low latency.
   poweredByHeader: false,
 };

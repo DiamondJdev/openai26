@@ -1,4 +1,5 @@
 import { getAppContext } from "@/lib/runtime/context";
+import { after } from "next/server";
 import { getClaimById } from "@/lib/db/repositories/claims";
 import {
   isInvestigationRunning,
@@ -8,6 +9,7 @@ import { fail, ok } from "@/lib/api/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function POST(
   _req: Request,
@@ -15,7 +17,7 @@ export async function POST(
 ) {
   const { id } = await params;
   const ctx = await getAppContext();
-  const claim = getClaimById(ctx.db, id);
+  const claim = await getClaimById(ctx.db, id);
   if (!claim) return fail("Claim not found.", 404);
   if (isInvestigationRunning(id)) {
     return ok({ started: true, alreadyRunning: true });
@@ -29,6 +31,8 @@ export async function POST(
   if (claim.selectedRegions.length === 0) {
     return fail("Mark the reported damage areas before investigating.", 409);
   }
-  launchInvestigation(ctx, id);
+  after(async () => {
+    await launchInvestigation(ctx, id);
+  });
   return ok({ started: true });
 }

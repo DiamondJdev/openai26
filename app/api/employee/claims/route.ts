@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const ctx = await getAppContext();
-  const claims = listClaims(ctx.db).map((c) => claimSummary(ctx, c));
+  const claims = await Promise.all((await listClaims(ctx.db)).map((claim) => claimSummary(ctx, claim)));
   return ok({ claims });
 }
 
@@ -22,13 +22,13 @@ export async function POST(req: NextRequest) {
       managerNote?: unknown;
     };
     if (typeof body.plate !== "string") return fail("A plate is required.");
-    const created = createClaim(ctx, {
+    const created = await createClaim(ctx, {
       plate: body.plate,
       managerNote: typeof body.managerNote === "string" ? body.managerNote : "",
     });
     return ok(
       {
-        claim: claimSummary(ctx, created.claim),
+        claim: await claimSummary(ctx, created.claim),
         url: created.url,
         pin: created.pin,
       },

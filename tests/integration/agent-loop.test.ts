@@ -12,8 +12,8 @@ const LIMITS = { maxInvestigationMs: 45_000 };
 beforeEach(async () => {
   h = await buildToolHarness();
 });
-afterEach(() => {
-  h.cleanup();
+afterEach(async () => {
+  await h.cleanup();
 });
 
 /** Clean-pass plan: extract entrance+exit, analyze, compare, save, report. */
@@ -66,11 +66,11 @@ describe("runInvestigation", () => {
       limits: LIMITS,
     });
     expect(result.status).toBe("review_ready");
-    const report = getReportByClaimId(h.db, h.claim.id);
+    const report = await getReportByClaimId(h.db, h.claim.id);
     expect(report?.outcome).toBe("no_new_damage_detected");
     expect(report?.timeline.every((t) => t.frameId)).toBe(true);
-    expect(getClaimByIdOrThrow(h.db, h.claim.id).status).toBe("review_ready");
-    const events = listEventsByClaim(h.db, h.claim.id);
+    expect((await getClaimByIdOrThrow(h.db, h.claim.id)).status).toBe("review_ready");
+    const events = await listEventsByClaim(h.db, h.claim.id);
     expect(events[0]?.type).toBe("started");
   });
 
@@ -118,7 +118,7 @@ describe("runInvestigation", () => {
       limits: LIMITS,
     });
     expect(result.status).toBe("review_ready");
-    expect(getReportByClaimId(h.db, h.claim.id)?.outcome).toBe(
+    expect((await getReportByClaimId(h.db, h.claim.id))?.outcome).toBe(
       "new_damage_detected",
     );
   });
@@ -151,10 +151,10 @@ describe("runInvestigation", () => {
       limits: LIMITS,
     });
     expect(result.status).toBe("manual_review_required");
-    expect(getClaimByIdOrThrow(h.db, h.claim.id).status).toBe(
+    expect((await getClaimByIdOrThrow(h.db, h.claim.id)).status).toBe(
       "manual_review_required",
     );
-    expect(getReportByClaimId(h.db, h.claim.id)).toBeNull();
+    expect(await getReportByClaimId(h.db, h.claim.id)).toBeNull();
   });
 
   it("continues past a tool-call count until the investigation times out", async () => {

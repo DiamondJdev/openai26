@@ -1,4 +1,5 @@
-import type { DB } from "@/lib/db/connection";
+import type { Database } from "@/lib/db/connection";
+import type { ArtifactStore } from "@/lib/storage/artifacts";
 import type { Claim } from "@/lib/domain/models";
 import type { ReleaseOptions } from "@/lib/domain/report";
 import { assertTransition } from "@/lib/domain/claim-state-machine";
@@ -47,20 +48,20 @@ export function resolveReleaseOptions(input: unknown): ReleaseOptions {
  * focused entrance/exit crops. Requires the claim to be in `review_ready`.
  */
 export async function releaseReport(
-  db: DB,
+  db: Database,
   claimId: string,
   options: ReleaseOptions,
-  cropsDir: string,
+  artifacts: ArtifactStore,
 ): Promise<Claim> {
-  const claim = getClaimByIdOrThrow(db, claimId);
+  const claim = await getClaimByIdOrThrow(db, claimId);
   if (claim.status !== "review_ready") {
     throw new InvalidTransitionError(claim.status, "released");
   }
   assertTransition(claim.status, "released");
   if (options.shareEvidenceCrops) {
-    await generateReleaseCrops(db, claim, cropsDir);
+    await generateReleaseCrops(db, artifacts, claim);
   }
-  return releaseClaim(db, claimId, options.shareEvidenceCrops);
+  return await releaseClaim(db, claimId, options.shareEvidenceCrops);
 }
 
 function humanReviewCopy(outcome: HumanReviewOutcome): {
@@ -86,16 +87,16 @@ function humanReviewCopy(outcome: HumanReviewOutcome): {
  * to the customer. Human determinations intentionally contain no AI findings
  * or evidence crops, and never expose the internal manual-review reason.
  */
-export function completeManualReview(
-  db: DB,
+export async function completeManualReview(
+  db: Database,
   claimId: string,
   outcome: HumanReviewOutcome,
-): Claim {
-  const claim = getClaimByIdOrThrow(db, claimId);
+): Promise<Claim> {
+  const claim = await getClaimByIdOrThrow(db, claimId);
   assertTransition(claim.status, "released");
 
   const copy = humanReviewCopy(outcome);
-  const report = insertReport(db, {
+  const report = await insertReport(db, {
     claimId,
     outcome,
     ...copy,
@@ -108,13 +109,13 @@ export function completeManualReview(
       rationale: "Final determination by a human employee.",
     },
   });
-  attachReport(db, claimId, report.id, "released");
-  return releaseClaim(db, claimId, false);
+  await attachReport(db, claimId, report.id, "released");
+  return await releaseClaim(db, claimId, false);
 }
 
 /** Hold a review-ready (or in-flight) claim for manual review. */
-export function holdClaim(db: DB, claimId: string, reason: string): Claim {
-  const claim = getClaimByIdOrThrow(db, claimId);
+export async function holdClaim(db: Database, claimId: string, reason: string): Promise<Claim> {
+  const claim = await getClaimByIdOrThrow(db, claimId);
   assertTransition(claim.status, "manual_review_required");
-  return holdForManualReview(db, claimId, reason);
+  return await holdForManualReview(db, claimId, reason);
 }

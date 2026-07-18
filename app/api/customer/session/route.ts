@@ -18,11 +18,11 @@ export async function POST(req: NextRequest) {
     if (typeof body.token !== "string" || typeof body.pin !== "string") {
       return fail("Enter the PIN from your link.", 400);
     }
-    const result = verifyAndStartSession(ctx, body.token, body.pin);
+    const result = await verifyAndStartSession(ctx, body.token, body.pin);
     if (!result.ok) {
       return fail(result.error, result.retryAfterMs ? 429 : 401);
     }
-    const res = ok({ view: getCustomerView(ctx, result.claimId) });
+    const res = ok({ view: await getCustomerView(ctx, result.claimId) });
     setSessionCookie(res, result.sessionToken);
     return res;
   } catch (error) {

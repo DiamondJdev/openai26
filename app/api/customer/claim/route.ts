@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   const claimId = readSessionClaimId(req, ctx);
   if (!claimId) return fail("Your session has expired. Re-enter your PIN.", 401);
   try {
-    return ok({ view: getCustomerView(ctx, claimId) });
+    return ok({ view: await getCustomerView(ctx, claimId) });
   } catch (error) {
     return handleError(error);
   }

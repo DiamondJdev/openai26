@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
 import { validateAndReencode } from "@/lib/uploads/validate";
+import { buildAppHarness, jpegBuffer } from "../helpers/app";
+import { createClaim } from "@/lib/claims/create";
+import { submitIntake } from "@/lib/claims/customer";
+import { listUploadsByClaim } from "@/lib/db/repositories/uploads";
 
 async function png(width: number, height: number): Promise<Buffer> {
   return sharp({
@@ -70,5 +74,39 @@ describe("validateAndReencode", () => {
     if (!result.ok) return;
     const meta = await sharp(result.image.data).metadata();
     expect(meta.exif).toBeUndefined();
+  });
+});
+
+describe("customer upload persistence", () => {
+  it("persists a validated intake image under the private uploads prefix", async () => {
+    const h = await buildAppHarness();
+    try {
+      const { claim } = await createClaim(h.ctx, {
+        plate: "TEST-123",
+        managerNote: "rear bumper",
+      });
+      const image = await jpegBuffer();
+
+      await submitIntake(h.ctx, claim.id, {
+        name: "Jordan Doe",
+        email: "jordan@example.com",
+        phone: "555-123-4567",
+        consent: true,
+        files: [
+          { kind: "plate", bytes: image },
+          { kind: "odometer", bytes: image },
+          { kind: "insurance", bytes: image },
+        ],
+      });
+
+      const uploads = await listUploadsByClaim(h.ctx.db, claim.id);
+      expect(uploads.map((upload) => upload.storedPath)).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/^claimlens\/uploads\//),
+        ]),
+      );
+    } finally {
+      await h.cleanup();
+    }
   });
 });

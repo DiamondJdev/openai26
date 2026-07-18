@@ -36,19 +36,19 @@ export interface CreatedClaim {
  * Create a draft claim from a manager-entered plate, selecting the latest visit,
  * and issue a private link token + PIN (only hashes are stored).
  */
-export function createClaim(
+export async function createClaim(
   ctx: AppContext,
   input: CreateClaimInput,
-): CreatedClaim {
+): Promise<CreatedClaim> {
   const plate = validatePlate(input.plate);
   if (!plate.ok) throw new ValidationError(plate.error);
 
-  const visit = findLatestVisitByPlate(ctx.db, plate.normalized);
+  const visit = await findLatestVisitByPlate(ctx.db, plate.normalized);
   if (!visit) {
     throw new NotFoundError("No recent wash visit was found for that plate.");
   }
 
-  const claim = insertClaim(ctx.db, {
+  const claim = await insertClaim(ctx.db, {
     visitId: visit.id,
     vehicleType: visit.vehicleType,
     selectedRegions: [],
@@ -57,7 +57,7 @@ export function createClaim(
 
   const token = generateToken();
   const pin = generatePin();
-  insertCustomerAccess(ctx.db, {
+  await insertCustomerAccess(ctx.db, {
     claimId: claim.id,
     tokenHash: hashToken(token),
     pinHash: hashPin(pin),
@@ -73,11 +73,11 @@ export interface IntakeSelection {
 }
 
 /** Validate and persist the employee's vehicle-type + damage-region selection. */
-export function setClaimIntake(
+export async function setClaimIntake(
   ctx: AppContext,
   claimId: string,
   input: unknown,
-): Claim {
+): Promise<Claim> {
   const body = (input ?? {}) as {
     vehicleType?: unknown;
     selectedRegions?: unknown;
@@ -97,7 +97,7 @@ export function setClaimIntake(
   }
   // Dedupe while preserving order.
   const unique = [...new Set(regions)] as DamageRegion[];
-  const claim = getClaimByIdOrThrow(ctx.db, claimId);
+  const claim = await getClaimByIdOrThrow(ctx.db, claimId);
   // Only editable before the investigation runs, so the report/crops can never
   // diverge from the regions they were generated against.
   if (claim.status !== "customer_submitted") {
@@ -105,5 +105,5 @@ export function setClaimIntake(
       "Damage areas can only be set before the investigation runs.",
     );
   }
-  return setClaimSelection(ctx.db, claimId, body.vehicleType, unique);
+  return await setClaimSelection(ctx.db, claimId, body.vehicleType, unique);
 }

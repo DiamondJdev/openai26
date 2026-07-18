@@ -1,4 +1,4 @@
-import type { DB } from "@/lib/db/connection";
+import type { Database } from "@/lib/db/connection";
 import type { Claim } from "@/lib/domain/models";
 import type {
   Confidence,
@@ -101,17 +101,17 @@ function conclusionFor(outcome: ReportOutcome): {
 }
 
 /** Enforce that every finding cites at least one stored, in-scope evidence frame. */
-function assertCitations(
-  db: DB,
+async function assertCitations(
+  db: Database,
   claimId: string,
   findings: readonly Finding[],
-): void {
+): Promise<void> {
   for (const finding of findings) {
     if (finding.evidenceFrameIds.length === 0) {
       throw new UncitedFindingError(`Finding ${finding.id} cites no evidence.`);
     }
     for (const frameId of finding.evidenceFrameIds) {
-      const frame = getFrameById(db, frameId);
+      const frame = await getFrameById(db, frameId);
       if (!frame || frame.claimId !== claimId) {
         throw new UncitedFindingError(
           `Finding ${finding.id} cites frame ${frameId} that is missing or out of scope.`,
@@ -142,12 +142,12 @@ function buildTimeline(findings: readonly Finding[]): TimelineEntry[] {
  * inconclusive outcome) and UncitedFindingError if any finding lacks stored
  * evidence — the report is generated ONLY from cited findings.
  */
-export function compileAndPersistReport(db: DB, claim: Claim): Report {
-  const findings = listFindingsByClaim(db, claim.id);
+export async function compileAndPersistReport(db: Database, claim: Claim): Promise<Report> {
+  const findings = await listFindingsByClaim(db, claim.id);
   if (findings.length === 0) {
     throw new ManualReviewRequiredError("No findings were produced.");
   }
-  assertCitations(db, claim.id, findings);
+  await assertCitations(db, claim.id, findings);
 
   const outcome = deriveOutcome(findings);
   if (outcome === "manual_review_required") {
@@ -157,7 +157,7 @@ export function compileAndPersistReport(db: DB, claim: Claim): Report {
   }
 
   const { summary, conclusion } = conclusionFor(outcome);
-  const report = insertReport(db, {
+  const report = await insertReport(db, {
     claimId: claim.id,
     outcome,
     summary,
@@ -166,6 +166,6 @@ export function compileAndPersistReport(db: DB, claim: Claim): Report {
     findingIds: findings.map((f) => f.id),
     confidence: deriveConfidence(findings, outcome),
   });
-  attachReport(db, claim.id, report.id, "review_ready");
+  await attachReport(db, claim.id, report.id, "review_ready");
   return report;
 }

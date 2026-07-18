@@ -29,12 +29,12 @@ export async function startInvestigation(
   claimId: string,
   opts: StartInvestigationOptions = {},
 ): Promise<InvestigationResult> {
-  const claim = getClaimByIdOrThrow(ctx.db, claimId);
-  const visit = getVisitById(ctx.db, claim.visitId);
+  const claim = await getClaimByIdOrThrow(ctx.db, claimId);
+  const visit = await getVisitById(ctx.db, claim.visitId);
   if (!visit) throw new NotFoundError("Visit footage is not available.");
 
   assertTransition(claim.status, "investigating");
-  const investigating = updateClaimStatus(ctx.db, claimId, "investigating");
+  const investigating = await updateClaimStatus(ctx.db, claimId, "investigating");
 
   const driver =
     opts.driver ??
@@ -45,11 +45,10 @@ export async function startInvestigation(
 
   const toolContext: ToolContext = {
     db: ctx.db,
+    artifacts: ctx.artifacts,
     claim: investigating,
     visit,
     footageRoot: ctx.footageRoot,
-    framesDir: ctx.paths.frames,
-    cropsDir: ctx.paths.crops,
     vision,
     localizations: new Map(),
     onEvent: opts.onEvent,

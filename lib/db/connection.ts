@@ -1,15 +1,11 @@
-import fs from "node:fs";
-import path from "node:path";
 import { neon } from "@neondatabase/serverless";
-import DatabaseDriver from "better-sqlite3";
-import { newDb } from "pg-mem";
-import { SCHEMA_SQL } from "./schema";
+import { DataType, newDb } from "pg-mem";
 
 type DatabaseParameter = string | number | boolean | null;
 
 /** Shared asynchronous persistence boundary for production and tests. */
 export interface Database {
-  query<T extends Record<string, unknown> = Record<string, unknown>>(
+  query<T = Record<string, unknown>>(
     text: string,
     parameters?: readonly DatabaseParameter[],
   ): Promise<T[]>;
@@ -21,7 +17,7 @@ export function createNeonDatabase(connectionString: string): Database {
   const sql = neon(connectionString);
 
   return {
-    async query<T extends Record<string, unknown> = Record<string, unknown>>(
+    async query<T = Record<string, unknown>>(
       text: string,
       parameters: readonly DatabaseParameter[] = [],
     ): Promise<T[]> {
@@ -33,14 +29,76 @@ export function createNeonDatabase(connectionString: string): Database {
 
 /** Create an isolated in-memory Postgres database for adapter and future repository tests. */
 export async function createTestDatabase(): Promise<Database> {
-  const { Pool } = newDb().adapters.createPg();
+  const memory = newDb();
+  memory.public.registerFunction({
+    name: "hashtext",
+    args: [DataType.text],
+    returns: DataType.integer,
+    implementation: (value: string) => {
+      let hash = 0;
+      for (let index = 0; index < value.length; index += 1) {
+        hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+      }
+      return hash;
+    },
+  });
+  memory.public.registerFunction({
+    name: "pg_advisory_xact_lock",
+    args: [DataType.integer],
+    returns: DataType.bool,
+    implementation: () => true,
+  });
+  const { Pool } = memory.adapters.createPg();
   const pool = new Pool();
+  let eventQueue: Promise<void> = Promise.resolve();
+
+  async function queryEventCte(
+    parameters: readonly DatabaseParameter[],
+  ): Promise<Record<string, unknown>[]> {
+    const [claimId, id, type, plainLanguage, detail, createdAt] = parameters;
+    if (
+      typeof claimId !== "string" ||
+      typeof id !== "string" ||
+      typeof type !== "string" ||
+      typeof plainLanguage !== "string" ||
+      typeof createdAt !== "string"
+    ) {
+      throw new Error("Invalid event CTE parameters");
+    }
+    const next = await pool.query(
+      "SELECT COALESCE(MAX(seq), -1) + 1 AS seq FROM investigation_events WHERE claim_id = $1",
+      [claimId],
+    );
+    const result = await pool.query(
+      `INSERT INTO investigation_events (id, claim_id, seq, type, plain_language, detail, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [id, claimId, Number(next.rows[0]?.seq ?? 0), type, plainLanguage, detail, createdAt],
+    );
+    return result.rows as Record<string, unknown>[];
+  }
 
   return {
-    async query<T extends Record<string, unknown> = Record<string, unknown>>(
+    async query<T = Record<string, unknown>>(
       text: string,
       parameters: readonly DatabaseParameter[] = [],
     ): Promise<T[]> {
+      // pg-mem cannot execute a data-modifying CTE. Serialize the equivalent
+      // operation only in this test adapter; Neon executes the repository's
+      // advisory-lock CTE unchanged in production.
+      if (/^\s*WITH locked AS/i.test(text)) {
+        let release!: () => void;
+        const current = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const previous = eventQueue;
+        eventQueue = current;
+        await previous;
+        try {
+          return (await queryEventCte(parameters)) as T[];
+        } finally {
+          release();
+        }
+      }
       const result = await pool.query(text, [...parameters]);
       return result.rows as T[];
     },
@@ -48,30 +106,4 @@ export async function createTestDatabase(): Promise<Database> {
       await pool.end();
     },
   };
-}
-
-// These synchronous SQLite exports are retained until Task 4 migrates the
-// existing repositories and their callers to the new Database port.
-export type DB = DatabaseDriver.Database;
-
-function applyPragmasAndSchema(db: DB): void {
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  db.pragma("busy_timeout = 5000");
-  db.exec(SCHEMA_SQL);
-}
-
-/** Open (creating parent dirs as needed) a legacy file-backed database. */
-export function openDatabase(dbPath: string): DB {
-  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-  const db = new DatabaseDriver(dbPath);
-  applyPragmasAndSchema(db);
-  return db;
-}
-
-/** Open a legacy in-memory database for pre-migration integration tests. */
-export function openMemoryDatabase(): DB {
-  const db = new DatabaseDriver(":memory:");
-  applyPragmasAndSchema(db);
-  return db;
 }

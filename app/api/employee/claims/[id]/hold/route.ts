@@ -14,16 +14,17 @@ export async function POST(
 ) {
   const { id } = await params;
   const ctx = await getAppContext();
-  if (!getClaimById(ctx.db, id)) return fail("Claim not found.", 404);
+  if (!(await getClaimById(ctx.db, id))) return fail("Claim not found.", 404);
   try {
     const body = (await req.json().catch(() => ({}))) as { reason?: unknown };
     const reason =
       typeof body.reason === "string" && body.reason.trim().length > 0
         ? body.reason.trim().slice(0, 300)
         : "Manager requested manual review.";
-    holdClaim(ctx.db, id, reason);
-    const updated = getClaimById(ctx.db, id)!;
-    return ok({ claim: claimDetail(ctx, updated) });
+    await holdClaim(ctx.db, id, reason);
+    const updated = await getClaimById(ctx.db, id);
+    if (!updated) return fail("Claim not found.", 404);
+    return ok({ claim: await claimDetail(ctx, updated) });
   } catch (error) {
     return handleError(error);
   }

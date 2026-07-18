@@ -13,23 +13,38 @@ const MIGRATIONS: readonly Migration[] = [
   },
 ];
 
+function isDuplicateSchemaObject(error: unknown): boolean {
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? error.code
+      : undefined;
+  const message = error instanceof Error ? error.message : "";
+  return (
+    code === "42P07" ||
+    code === "42710" ||
+    /(?:relation|index).*already exists|duplicate (?:table|index|object)/i.test(
+      message,
+    )
+  );
+}
+
+async function createSchemaObject(db: Database, statement: string): Promise<void> {
+  try {
+    await db.query(statement);
+  } catch (error) {
+    if (!isDuplicateSchemaObject(error)) throw error;
+  }
+}
+
 /** Apply every unapplied ClaimLens Postgres migration in version order. */
 export async function applyMigrations(db: Database): Promise<void> {
-  try {
-    await db.query(
-      `CREATE TABLE schema_migrations (
+  await createSchemaObject(
+    db,
+    `CREATE TABLE schema_migrations (
       version TEXT PRIMARY KEY,
       applied_at TEXT NOT NULL
     )`,
-    );
-  } catch (error) {
-    const code =
-      typeof error === "object" && error !== null && "code" in error
-        ? error.code
-        : undefined;
-    const message = error instanceof Error ? error.message : "";
-    if (code !== "42P07" && !/already exists/i.test(message)) throw error;
-  }
+  );
 
   const applied = await db.query<{ version: string }>(
     "SELECT version FROM schema_migrations",
@@ -40,11 +55,30 @@ export async function applyMigrations(db: Database): Promise<void> {
     if (appliedVersions.has(migration.version)) continue;
 
     for (const statement of migration.statements) {
-      await db.query(statement);
+      await createSchemaObject(db, statement);
     }
     await db.query(
-      "INSERT INTO schema_migrations (version, applied_at) VALUES ($1, $2)",
+      `INSERT INTO schema_migrations (version, applied_at) VALUES ($1, $2)
+       ON CONFLICT (version) DO NOTHING`,
       [migration.version, new Date().toISOString()],
     );
+  }
+}
+
+/** Remove all ClaimLens domain data for an explicit operator reset. */
+export async function resetClaimLensDatabase(db: Database): Promise<void> {
+  for (const table of [
+    "reports",
+    "investigation_events",
+    "findings",
+    "evidence_crops",
+    "evidence_frames",
+    "uploads",
+    "customer_submissions",
+    "customer_access",
+    "claims",
+    "visits",
+  ]) {
+    await db.query(`DELETE FROM ${table}`);
   }
 }

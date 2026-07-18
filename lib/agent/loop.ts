@@ -77,7 +77,7 @@ export async function runInvestigation(
   const now = opts.now ?? (() => Date.now());
   const startedAt = now();
 
-  const started = appendEvent(ctx.db, {
+  const started = await appendEvent(ctx.db, {
     claimId: ctx.claim.id,
     type: "started",
     plainLanguage: "Investigation started.",
@@ -88,9 +88,9 @@ export async function runInvestigation(
   let toolCallCount = 0;
   let invalidCalls = 0;
 
-  const finishManual = (reason: string): InvestigationResult => {
-    holdForManualReview(ctx.db, ctx.claim.id, reason);
-    const event = appendEvent(ctx.db, {
+  const finishManual = async (reason: string): Promise<InvestigationResult> => {
+    await holdForManualReview(ctx.db, ctx.claim.id, reason);
+    const event = await appendEvent(ctx.db, {
       claimId: ctx.claim.id,
       type: "manual_review",
       plainLanguage: `Routed to manual review: ${reason}`,
@@ -107,7 +107,7 @@ export async function runInvestigation(
   for (;;) {
     const elapsed = now() - startedAt;
     if (elapsed > limits.maxInvestigationMs) {
-      return finishManual("Investigation timed out.");
+      return await finishManual("Investigation timed out.");
     }
 
     let response;
@@ -118,12 +118,12 @@ export async function runInvestigation(
       );
     } catch (error) {
       if (error instanceof DeadlineError) {
-        return finishManual("Investigation timed out.");
+        return await finishManual("Investigation timed out.");
       }
       throw error;
     }
     if (response.toolCalls.length === 0) {
-      return finishManual("Investigation ended without a report.");
+      return await finishManual("Investigation ended without a report.");
     }
 
     for (const call of response.toolCalls) {
@@ -152,7 +152,7 @@ export async function runInvestigation(
           };
         }
         if (result.terminal === "manual_review_required") {
-          holdForManualReview(
+          await holdForManualReview(
             ctx.db,
             ctx.claim.id,
             result.manualReviewReason ?? "Manual review required.",
@@ -173,12 +173,12 @@ export async function runInvestigation(
             output: JSON.stringify({ error: "invalid_tool_call" }),
           });
           if (invalidCalls >= MAX_INVALID_TOOL_CALLS) {
-            return finishManual("Too many invalid tool calls.");
+            return await finishManual("Too many invalid tool calls.");
           }
           continue;
         }
         if (error instanceof UncitedFindingError) {
-          return finishManual("Report failed evidence-citation checks.");
+          return await finishManual("Report failed evidence-citation checks.");
         }
         throw error;
       }

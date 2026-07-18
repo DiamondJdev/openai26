@@ -2,10 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import type { Database, DB } from "@/lib/db/connection";
+import type { Database } from "@/lib/db/connection";
 import { CAMERA_IDS } from "@/lib/domain/cameras";
 import { VEHICLE_TYPES } from "@/lib/domain/vehicle";
-import { insertVisit } from "@/lib/db/repositories/visits";
 import { normalizePlate } from "@/lib/domain/plate";
 import { ValidationError } from "@/lib/domain/errors";
 import { FOOTAGE_KINDS, inferKind, type FootageSources } from "./types";
@@ -90,22 +89,7 @@ function seedVisitId(visit: ManifestVisit, sources: FootageSources): string {
   return `visit_seed_${createHash("sha256").update(identity).digest("hex")}`;
 }
 
-function seedLegacyManifest(db: DB, manifest: FootageManifest): number {
-  let count = 0;
-  for (const visit of manifest.visits) {
-    insertVisit(db, {
-      plateNormalized: normalizePlate(visit.plate),
-      plateDisplay: visit.plate,
-      vehicleType: visit.vehicleType,
-      occurredAt: visit.occurredAt,
-      sources: toSources(visit),
-    });
-    count += 1;
-  }
-  return count;
-}
-
-async function seedDatabaseManifest(
+export async function seedFromManifest(
   db: Database,
   manifest: FootageManifest,
 ): Promise<number> {
@@ -135,27 +119,4 @@ async function seedDatabaseManifest(
     count += 1;
   }
   return count;
-}
-
-function isAsyncDatabase(db: Database | DB): db is Database {
-  return "query" in db;
-}
-
-/**
- * Seed visits from a validated manifest. The Neon path is async and inserts
- * only deterministic, previously unseen fixture visits; the synchronous
- * SQLite overload remains for pre-Task-4 test and repository compatibility.
- */
-export function seedFromManifest(db: DB, manifest: FootageManifest): number;
-export function seedFromManifest(
-  db: Database,
-  manifest: FootageManifest,
-): Promise<number>;
-export function seedFromManifest(
-  db: Database | DB,
-  manifest: FootageManifest,
-): number | Promise<number> {
-  return isAsyncDatabase(db)
-    ? seedDatabaseManifest(db, manifest)
-    : seedLegacyManifest(db, manifest);
 }

@@ -1,31 +1,22 @@
-import type { NextRequest } from "next/server";
 import { getAppContext } from "@/lib/runtime/context";
 import { getCropById } from "@/lib/db/repositories/evidence";
-import { getClaimById } from "@/lib/db/repositories/claims";
-import { readSessionClaimId } from "@/lib/api/session-cookie";
 import { fail } from "@/lib/api/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Serve a released evidence crop to the owning customer only. Requires a valid
- * session for the crop's claim, and that the claim is released with sharing on.
+ * Serve an evidence crop to the trusted local employee context so the manager
+ * can preview exactly what would be shared before releasing the report.
  */
 export async function GET(
-  req: NextRequest,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const ctx = await getAppContext();
-  const claimId = readSessionClaimId(req, ctx);
-  if (!claimId) return fail("Not found.", 404);
-
   const crop = await getCropById(ctx.db, id);
-  if (!crop || crop.claimId !== claimId) return fail("Not found.", 404);
-
-  const claim = await getClaimById(ctx.db, claimId);
-  if (!claim || claim.status !== "released" || !claim.shareEvidenceCrops) {
+  if (!crop) {
     return fail("Not found.", 404);
   }
   const bytes = await ctx.artifacts.get(crop.storedPath);

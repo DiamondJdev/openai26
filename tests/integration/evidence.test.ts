@@ -3,7 +3,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
-import { runFfmpeg } from "@/lib/evidence/ffmpeg";
 import { extractFrameFromSource } from "@/lib/evidence/extract";
 import { createRegionCrop, isValidBBox } from "@/lib/evidence/crop";
 import { resolveFootagePath } from "@/lib/footage/resolve";
@@ -43,28 +42,13 @@ describe("frame extraction", () => {
     expect(frame.height).toBe(240);
   });
 
-  it("extracts a frame from a video source at a timestamp", async () => {
-    const video = path.join(tmp, "clip.mp4");
-    await runFfmpeg([
-      "-y",
-      "-f",
-      "lavfi",
-      "-i",
-      "color=c=green:s=320x240:d=1",
-      "-pix_fmt",
-      "yuv420p",
-      video,
-    ]);
-    const out = path.join(tmp, "frames", "v.jpg");
-    const frame = await extractFrameFromSource({
-      sourcePath: video,
+  it("rejects a video source without invoking ffmpeg", async () => {
+    await expect(extractFrameFromSource({
+      sourcePath: path.join(tmp, "clip.mp4"),
       kind: "video",
       timestampMs: 500,
-      outPath: out,
-    });
-    expect(fs.existsSync(out)).toBe(true);
-    expect(frame.width).toBe(320);
-    expect(frame.height).toBe(240);
+      outPath: path.join(tmp, "frames", "v.jpg"),
+    })).rejects.toThrow("video_unsupported");
   });
 });
 

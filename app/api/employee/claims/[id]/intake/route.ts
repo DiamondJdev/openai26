@@ -14,11 +14,11 @@ export async function POST(
 ) {
   const { id } = await params;
   const ctx = await getAppContext();
-  if (!getClaimById(ctx.db, id)) return fail("Claim not found.", 404);
+  if (!(await getClaimById(ctx.db, id))) return fail("Claim not found.", 404);
   try {
     const body = await req.json().catch(() => ({}));
-    const updated = setClaimIntake(ctx, id, body);
-    return ok({ claim: claimDetail(ctx, updated) });
+    const updated = await setClaimIntake(ctx, id, body);
+    return ok({ claim: await claimDetail(ctx, updated) });
   } catch (error) {
     return handleError(error);
   }

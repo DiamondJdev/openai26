@@ -13,10 +13,10 @@ export async function GET(
 ) {
   const { id } = await params;
   const ctx = await getAppContext();
-  const claim = getClaimById(ctx.db, id);
+  const claim = await getClaimById(ctx.db, id);
   if (!claim) return fail("Claim not found.", 404);
   return ok({
-    claim: claimDetail(ctx, claim),
+    claim: await claimDetail(ctx, claim),
     investigationRunning: isInvestigationRunning(id),
   });
 }

@@ -1,4 +1,5 @@
-import type { DB } from "@/lib/db/connection";
+import type { Database } from "@/lib/db/connection";
+import type { ArtifactStore } from "@/lib/storage/artifacts";
 import type { Claim, InvestigationEvent, Visit } from "@/lib/domain/models";
 import type { DamageRegion } from "@/lib/domain/regions";
 import type { NormalizedBBox } from "@/lib/domain/geometry";
@@ -54,12 +55,11 @@ export interface VisionPort {
  * current visit's sources.
  */
 export interface ToolContext {
-  readonly db: DB;
+  readonly db: Database;
+  readonly artifacts: ArtifactStore;
   readonly claim: Claim;
   readonly visit: Visit;
   readonly footageRoot: string;
-  readonly framesDir: string;
-  readonly cropsDir: string;
   readonly vision: VisionPort;
   /**
    * Vision localizations captured during analyze/compare, keyed by frameId. Used
