@@ -60,7 +60,6 @@ export async function buildAppHarness(
       dataDir: paths.root,
       dbPath: paths.db,
       manifestPath: "",
-      maxToolCalls: 12,
       maxInvestigationMs: 45_000,
     },
   };

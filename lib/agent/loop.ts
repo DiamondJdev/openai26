@@ -38,7 +38,6 @@ function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 export interface InvestigationLimits {
-  readonly maxToolCalls: number;
   readonly maxInvestigationMs: number;
 }
 
@@ -66,10 +65,10 @@ function safeParseJson(text: string): unknown {
 }
 
 /**
- * Drive the agentic tool-calling loop. Hard-capped at maxToolCalls validated
- * calls and maxInvestigationMs wall-clock; too many invalid calls, a timeout, a
- * model that quits without a report, or a citation failure all route the claim
- * to manual review rather than emitting an unsupported conclusion.
+ * Drive the agentic tool-calling loop. The wall-clock deadline limits the run;
+ * too many invalid calls, a timeout, a model that quits without a report, or a
+ * citation failure route the claim to manual review rather than emitting an
+ * unsupported conclusion.
  */
 export async function runInvestigation(
   opts: RunInvestigationOptions,
@@ -105,10 +104,7 @@ export async function runInvestigation(
     };
   };
 
-  // Bound the number of model turns as a final backstop; each turn can only add
-  // a limited number of tool calls before caps trip.
-  const maxTurns = limits.maxToolCalls + MAX_INVALID_TOOL_CALLS + 2;
-  for (let turn = 0; turn < maxTurns; turn++) {
+  for (;;) {
     const elapsed = now() - startedAt;
     if (elapsed > limits.maxInvestigationMs) {
       return finishManual("Investigation timed out.");
@@ -137,10 +133,6 @@ export async function runInvestigation(
         name: call.name,
         arguments: call.argumentsJson,
       });
-
-      if (toolCallCount >= limits.maxToolCalls) {
-        return finishManual("Investigation exceeded the tool-call limit.");
-      }
 
       const args = safeParseJson(call.argumentsJson);
       try {
@@ -192,6 +184,4 @@ export async function runInvestigation(
       }
     }
   }
-
-  return finishManual("Investigation did not converge.");
 }

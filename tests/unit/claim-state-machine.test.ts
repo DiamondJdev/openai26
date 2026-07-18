@@ -26,9 +26,9 @@ describe("claim state machine", () => {
     expect(canTransition("draft", "released")).toBe(false);
   });
 
-  it("treats released and manual_review_required as terminal", () => {
+  it("treats released as terminal and permits a manual determination to release", () => {
     expect(nextStatuses("released")).toEqual([]);
-    expect(nextStatuses("manual_review_required")).toEqual([]);
+    expect(nextStatuses("manual_review_required")).toEqual(["released"]);
   });
 
   it("forbids self-transitions", () => {

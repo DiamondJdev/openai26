@@ -278,6 +278,43 @@ export default function ClaimWorkspace() {
           <p className="mt-1 text-sm text-muted">
             {detail.manualReviewReason ?? "This claim needs a human review."}
           </p>
+          <div className="mt-5 border-t border-warning/30 pt-4">
+            <h3 className="font-medium">Release human-reviewed result</h3>
+            <p className="mt-1 text-sm text-muted">
+              Choose the final determination to send to the customer. The message
+              will state that a human employee manually reviewed the case.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  action(() =>
+                    apiPost(`/api/employee/claims/${id}/manual-release`, {
+                      outcome: "no_new_damage_detected",
+                    }),
+                  )
+                }
+                className="min-h-touch rounded-lg border border-border bg-surface px-5 py-2.5 font-semibold disabled:opacity-60"
+              >
+                Release: no new damage found
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  action(() =>
+                    apiPost(`/api/employee/claims/${id}/manual-release`, {
+                      outcome: "new_damage_detected",
+                    }),
+                  )
+                }
+                className="min-h-touch rounded-lg bg-accent px-5 py-2.5 font-semibold text-accent-fg disabled:opacity-60"
+              >
+                Release: new damage found
+              </button>
+            </div>
+          </div>
         </section>
       )}
     </main>

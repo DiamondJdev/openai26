@@ -7,7 +7,7 @@ import { getClaimByIdOrThrow } from "@/lib/db/repositories/claims";
 import { listEventsByClaim } from "@/lib/db/repositories/events";
 
 let h: ToolHarness;
-const LIMITS = { maxToolCalls: 12, maxInvestigationMs: 45_000 };
+const LIMITS = { maxInvestigationMs: 45_000 };
 
 beforeEach(async () => {
   h = await buildToolHarness();
@@ -157,17 +157,22 @@ describe("runInvestigation", () => {
     expect(getReportByClaimId(h.db, h.claim.id)).toBeNull();
   });
 
-  it("stops at the tool-call cap and holds for manual review", async () => {
+  it("continues past a tool-call count until the investigation times out", async () => {
     const driver = scriptedDriver(() => [
       tc("extract_frame", { camera: "entrance", timestampMs: 1_000 }),
     ]);
+    const nowValues = [0, 0, 0, 0, 0, 999_999];
+    let i = 0;
+    const now = () => nowValues[Math.min(i++, nowValues.length - 1)] ?? 999_999;
     const result = await runInvestigation({
       ctx: h.ctx,
       driver,
-      limits: { maxToolCalls: 3, maxInvestigationMs: 45_000 },
+      limits: { maxInvestigationMs: 45_000 },
+      now,
     });
     expect(result.status).toBe("manual_review_required");
-    expect(result.toolCallCount).toBe(3);
+    expect(result.reason).toMatch(/timed out/i);
+    expect(result.toolCallCount).toBe(4);
   });
 
   it("holds for manual review when the run times out", async () => {

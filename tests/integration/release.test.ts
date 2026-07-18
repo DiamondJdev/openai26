@@ -5,14 +5,17 @@ import path from "node:path";
 import sharp from "sharp";
 import { testDb, seedClaim } from "../helpers/db";
 import {
+  completeManualReview,
   holdClaim,
   releaseReport,
+  resolveHumanReviewOutcome,
   resolveReleaseOptions,
 } from "@/lib/claims/release";
 import { InvalidTransitionError } from "@/lib/domain/errors";
 import { updateClaimStatus } from "@/lib/db/repositories/claims";
 import { insertFrame, listCropsByClaim } from "@/lib/db/repositories/evidence";
 import { insertFinding } from "@/lib/db/repositories/findings";
+import { getReportByClaimId } from "@/lib/db/repositories/reports";
 
 let tmp: string;
 let cropsDir: string;
@@ -50,6 +53,20 @@ describe("resolveReleaseOptions", () => {
     expect(resolveReleaseOptions({ shareEvidenceCrops: true })).toEqual({
       shareEvidenceCrops: true,
     });
+  });
+});
+
+describe("resolveHumanReviewOutcome", () => {
+  it("accepts only the two employee decision outcomes", () => {
+    expect(resolveHumanReviewOutcome({ outcome: "no_new_damage_detected" })).toBe(
+      "no_new_damage_detected",
+    );
+    expect(resolveHumanReviewOutcome({ outcome: "new_damage_detected" })).toBe(
+      "new_damage_detected",
+    );
+    expect(() =>
+      resolveHumanReviewOutcome({ outcome: "manual_review_required" }),
+    ).toThrow("Choose whether new damage was found.");
   });
 });
 
@@ -133,6 +150,16 @@ describe("releaseReport", () => {
       releaseReport(db, claim.id, { shareEvidenceCrops: false }, cropsDir),
     ).rejects.toThrow(InvalidTransitionError);
   });
+
+  it("does not release a manual-review claim without a human determination", async () => {
+    const db = testDb();
+    const { claim } = seedClaim(db);
+    updateClaimStatus(db, claim.id, "manual_review_required");
+
+    await expect(
+      releaseReport(db, claim.id, { shareEvidenceCrops: false }, cropsDir),
+    ).rejects.toThrow(InvalidTransitionError);
+  });
 });
 
 describe("holdClaim", () => {
@@ -143,5 +170,29 @@ describe("holdClaim", () => {
     const held = holdClaim(db, claim.id, "manager wants a closer look");
     expect(held.status).toBe("manual_review_required");
     expect(held.manualReviewReason).toBe("manager wants a closer look");
+  });
+});
+
+describe("completeManualReview", () => {
+  it("releases a human-reviewed no-damage decision to the customer", () => {
+    const db = testDb();
+    const { claim } = seedClaim(db);
+    updateClaimStatus(db, claim.id, "manual_review_required");
+
+    const released = completeManualReview(
+      db,
+      claim.id,
+      "no_new_damage_detected",
+    );
+
+    expect(released.status).toBe("released");
+    expect(released.shareEvidenceCrops).toBe(false);
+    expect(getReportByClaimId(db, claim.id)).toMatchObject({
+      outcome: "no_new_damage_detected",
+      conclusion: "No new damage found.",
+      summary:
+        "A human employee manually reviewed your case and determined no new damage was found.",
+      findingIds: [],
+    });
   });
 });

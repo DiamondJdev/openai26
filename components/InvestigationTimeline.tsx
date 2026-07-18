@@ -132,8 +132,10 @@ export function InvestigationTimeline({
 
   const firstEvent = events[0];
   const lastEvent = events.at(-1);
-  const t0 = firstEvent ? Date.parse(firstEvent.createdAt) : null;
-  const tLast = lastEvent ? Date.parse(lastEvent.createdAt) : null;
+  const t0 = firstEvent ? Date.parse(firstEvent!.createdAt) : null;
+  const tLast = lastEvent
+      ? Date.parse(lastEvent!.createdAt)
+      : null;
   const steps = events.filter((e) => e.type === "tool_call").length;
 
   return (

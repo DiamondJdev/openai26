@@ -2,8 +2,8 @@ import type { ClaimStatus } from "./claim-status";
 import { InvalidTransitionError } from "./errors";
 
 /**
- * The claim lifecycle as an explicit adjacency map. `released` and
- * `manual_review_required` are terminal. There are no self-transitions.
+ * The claim lifecycle as an explicit adjacency map. A manual-review claim may
+ * be released only after an employee records a final human determination.
  */
 const TRANSITIONS: Readonly<Record<ClaimStatus, readonly ClaimStatus[]>> = {
   draft: ["customer_submitted"],
@@ -11,7 +11,7 @@ const TRANSITIONS: Readonly<Record<ClaimStatus, readonly ClaimStatus[]>> = {
   investigating: ["review_ready", "manual_review_required"],
   review_ready: ["released", "manual_review_required"],
   released: [],
-  manual_review_required: [],
+  manual_review_required: ["released"],
 };
 
 export function nextStatuses(from: ClaimStatus): readonly ClaimStatus[] {

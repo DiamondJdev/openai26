@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { toString as toQrCodeSvg } from "qrcode";
 import { apiGet, apiPost } from "@/lib/client/api";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { ClaimStatus } from "@/lib/domain/claim-status";
@@ -55,6 +56,35 @@ export default function EmployeeDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<CreatedClaim | null>(null);
   const [claims, setClaims] = useState<QueueClaim[]>([]);
+  const [qrCode, setQrCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!created?.url) {
+      setQrCode(null);
+      return;
+    }
+
+    let cancelled = false;
+    setQrCode(null);
+    toQrCodeSvg(created.url, {
+      type: "svg",
+      width: 160,
+      margin: 1,
+      errorCorrectionLevel: "M",
+    })
+      .then((svg) => {
+        if (!cancelled) {
+          setQrCode(`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setQrCode(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [created?.url]);
 
   const loadQueue = useCallback(async () => {
     try {
@@ -151,8 +181,34 @@ export default function EmployeeDashboard() {
             <p className="text-sm font-medium">
               Share these with the customer (shown once):
             </p>
-            <CopyRow label="Private link" value={created.url} />
-            <CopyRow label="PIN" value={created.pin} />
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+              {qrCode && (
+                <figure className="shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={qrCode}
+                    alt="QR code for the private customer link"
+                    width={160}
+                    height={160}
+                    className="rounded-lg bg-white p-2"
+                  />
+                  <figcaption className="mt-1 text-xs text-muted">
+                    Scan to open the private link.
+                  </figcaption>
+                </figure>
+              )}
+              <div className="min-w-0 flex-1 space-y-3">
+                <CopyRow label="Private link" value={created.url} />
+                <CopyRow label="PIN" value={created.pin} />
+                <p className="text-xs text-muted">Share the PIN separately.</p>
+                <button
+                  type="button"
+                  className="min-h-touch rounded-lg border border-border px-3 py-2 text-sm"
+                >
+                  Share link
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </section>

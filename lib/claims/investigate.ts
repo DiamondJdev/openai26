@@ -59,7 +59,6 @@ export async function startInvestigation(
     ctx: toolContext,
     driver,
     limits: {
-      maxToolCalls: ctx.env.maxToolCalls,
       maxInvestigationMs: ctx.env.maxInvestigationMs,
     },
     now: opts.now,

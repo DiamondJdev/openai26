@@ -80,7 +80,7 @@ export const TOOL_DEFINITIONS = [
     type: "function" as const,
     name: "save_finding",
     description:
-      "Persist one structured finding tied to the evidence frames it came from. Every finding must cite at least one frameId returned by extract_frame.",
+      "Persist one structured finding tied to the evidence frames it came from. Every finding must cite at least one frameId returned by extract_frame. When cited footage is clear, save no_damage, pre_existing, or new_damage. Use inconclusive only when the cited footage is missing, obscured, or contradictory.",
     parameters: {
       type: "object",
       additionalProperties: false,

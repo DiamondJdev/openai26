@@ -22,10 +22,6 @@ export function getEnv() {
     dbPath: process.env.CLAIMLENS_DB_PATH ?? "",
     manifestPath: process.env.CLAIMLENS_MANIFEST_PATH ?? "fixtures/manifest.json",
     // Env may only tighten the guardrails, never exceed the hard caps.
-    maxToolCalls: Math.min(
-      readInt("CLAIMLENS_MAX_TOOL_CALLS", INVESTIGATION_LIMITS.maxToolCalls),
-      INVESTIGATION_LIMITS.maxToolCalls,
-    ),
     maxInvestigationMs: Math.min(
       readInt(
         "CLAIMLENS_MAX_INVESTIGATION_MS",

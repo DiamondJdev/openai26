@@ -2,7 +2,6 @@ import type { UploadKind } from "@/lib/domain/models";
 
 /** Hard guardrails on an investigation run. Env may lower these, never raise. */
 export const INVESTIGATION_LIMITS = {
-  maxToolCalls: 12,
   maxInvestigationMs: 45_000,
 } as const;
 
