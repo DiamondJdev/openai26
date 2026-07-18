@@ -25,8 +25,7 @@ One local Next.js/TypeScript app covers the full claim lifecycle:
 ## Prerequisites
 
 - Node 20+.
-- A Neon `DATABASE_URL` and Blob credentials (`BLOB_READ_WRITE_TOKEN` locally,
-  or Vercel OIDC/store credentials when deployed).
+- A Neon `DATABASE_URL` and a private Vercel Blob store.
 - An OpenAI API key with GPT-5.6 vision + Responses tool calling for live runs.
 
 ## Setup
@@ -47,10 +46,48 @@ npm run reset    # explicitly wipe ClaimLens database rows and private artifacts
 npm run seed     # idempotently seed manifest visits into Neon
 ```
 
-Set `CLAIMLENS_PUBLIC_BASE_URL` to the deployed app URL so generated customer
-links are reachable. Employee access is configured with `EMPLOYEE_USERNAME` and
-`EMPLOYEE_PASSWORD`; `/employee` redirects authorized staff to the sign-in page
-and the signed session protects employee APIs as well.
+For local development, set `BLOB_READ_WRITE_TOKEN` in `.env.local`. Set
+`CLAIMLENS_PUBLIC_BASE_URL` only when you need to override the generated
+customer-link host; otherwise it uses `VERCEL_URL` on Vercel and localhost
+locally.
+
+## Deploy to Vercel
+
+1. Create or connect a **private Blob store** in the Vercel project. ClaimLens
+   stores uploads, extracted frames, and crops under `claimlens/`; it does not
+   use public Blob URLs.
+2. Connect a Neon database and set `DATABASE_URL` for both Preview and
+   Production. **Preview and Production share the same Neon database by
+   design**, so a reset from either deployment resets the shared demo data.
+3. Set `EMPLOYEE_USERNAME`, `EMPLOYEE_PASSWORD`, `DATABASE_URL`, and
+   `OPENAI_API_KEY` as server-only values for Preview and Production. Do not
+   prefix these with `NEXT_PUBLIC_`.
+4. For Vercel Blob access, enable Vercel OIDC and provide `BLOB_STORE_ID`; the
+   deployed app uses Vercel's `VERCEL_OIDC_TOKEN`. For local commands, use
+   `BLOB_READ_WRITE_TOKEN` instead. The example environment file lists both
+   modes without containing a secret.
+5. In Vercel project settings, enable **Automatically expose System Environment
+   Variables**. This makes `VERCEL_URL` available, allowing each claim's
+   customer link to use the hostname of the deployment that created it. Leave
+   `CLAIMLENS_PUBLIC_BASE_URL` unset on Vercel unless a fixed custom hostname is
+   required.
+
+After deploying, visit `/employee`. Staff sign in at `/employee/login` using
+the configured username and password. Successful login creates a signed,
+expiring employee session cookie. That session protects every employee page and
+API, except `/employee/login`, `/api/employee/login`, and
+`/api/employee/logout` (which clears the cookie). The login route has a small
+in-memory per-instance attempt limiter; that simplicity is an intentional
+hackathon tradeoff.
+
+The employee dashboard contains a **protected employee reset control**. It
+deletes only ClaimLens database rows and `claimlens/` Blob artifacts, then
+re-seeds the fixture visits. It does not delete the Blob store, the Neon
+database, or unrelated records. Because Preview and Production share Neon,
+treat that button as a reset of the hosted demo, not an isolated Preview reset.
+
+Footage sources must be **still images**. Vercel has no ffmpeg-based video path
+in this application, so video footage is not supported.
 
 ## Test & verify
 

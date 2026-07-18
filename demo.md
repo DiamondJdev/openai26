@@ -2,25 +2,23 @@
 
 A ~3-minute live demo of the full claim lifecycle: an employee starts a
 plate-based claim on the **laptop**, the customer submits their intake on a
-**phone** (via ngrok), the employee runs the three-camera investigation and
-watches the agent reason live, then releases the cited report to the customer's
-phone.
+**phone** using the deployed private link, the employee runs the three-camera
+investigation and watches the agent reason live, then releases the cited report
+to the customer's phone.
 
 Two devices:
 - **Laptop** → employee console (`/employee`)
-- **Phone** → customer flow (the private `/c/<link>` on the ngrok URL)
+- **Phone** → customer flow (the private `/c/<link>` on the current deployment)
 
 ---
 
 ## 1. Before you start (prereqs)
 
-- **ffmpeg** on PATH (`ffmpeg -version`).
 - An **OpenAI API key** with GPT-5.6 vision + Responses tool calling. The live
   investigation is real-model-only — without a key it routes to manual review.
-- **ngrok** installed and authed (`ngrok http 3000` works).
 - The **wash footage wired in** (see step 3). Without footage the agent can't
   extract frames and will route to manual review.
-- Laptop and phone on networks that can both reach the ngrok URL.
+- A deployed Vercel URL that both the laptop and phone can reach.
 
 ---
 
@@ -35,13 +33,20 @@ Set these values:
 ```bash
 OPENAI_API_KEY=sk-...                 # your key
 CLAIMLENS_MODEL=gpt-5.6               # confirm this is the model id your account exposes
-EMPLOYEE_ACCESS_TOKEN=<random>        # openssl rand -hex 24  — gates the employee console
-# CLAIMLENS_PUBLIC_BASE_URL is set in step 4, after ngrok gives you a URL.
+EMPLOYEE_USERNAME=demo-operator       # server-only console sign-in name
+EMPLOYEE_PASSWORD=<strong-password>   # server-only console sign-in password
+DATABASE_URL=postgresql://...          # Neon database shared by the hosted demo
+BLOB_READ_WRITE_TOKEN=...             # local `npm run seed` / `npm run reset` only
+# Leave CLAIMLENS_PUBLIC_BASE_URL unset on Vercel to use the active VERCEL_URL.
 ```
 
-`EMPLOYEE_ACCESS_TOKEN` matters here: tunneling the customer link also exposes
-`/employee`, so this token puts the console behind HTTP Basic auth (any
-username, password = the token).
+For the hosted deployment, configure `EMPLOYEE_USERNAME`,
+`EMPLOYEE_PASSWORD`, `DATABASE_URL`, and `OPENAI_API_KEY` as server-only
+Preview and Production variables. Connect a private Vercel Blob store, enable
+Vercel OIDC, and set `BLOB_STORE_ID`; Vercel supplies `VERCEL_OIDC_TOKEN`.
+Enable **Automatically expose System Environment Variables** so `VERCEL_URL`
+generates customer links for the current deployment. Preview and Production
+intentionally use the same Neon database.
 
 ---
 
@@ -57,37 +62,33 @@ fixtures/footage/demo-damage/   entrance.png  mid.png  exit.png    → plate 8XY
 
 If you only have before/after pairs, map `before → entrance` (+ `mid`) and
 `after → exit`, and edit `fixtures/manifest.json` to point at your real
-filenames (`"kind": "image"`). Optionally verify the seed:
+filenames (`"kind": "image"`). ClaimLens supports still images only; the
+Vercel deployment has no ffmpeg-based video path. Optionally verify the seed:
 
 ```bash
 npm run seed        # prints how many visits were seeded from the manifest
 ```
 
-> The app **purges all data on startup** (nothing survives a session) and
-> re-seeds these visits automatically — so the plates are always available, but
-> create fresh claims live during the demo.
+> There is no startup purge. The hosted employee dashboard has a protected reset
+> control: it deletes only ClaimLens database rows and `claimlens/` Blob
+> artifacts, then re-seeds these fixture visits. Because Preview and Production
+> share Neon, reset deliberately affects the shared demo data.
 
 ---
 
-## 4. Start everything (order matters)
+## 4. Start the hosted demo
 
-```bash
-# a) open the tunnel — copy the https URL it prints
-ngrok http 3000
+Deploy the configured Vercel project. Do not set `CLAIMLENS_PUBLIC_BASE_URL`
+unless you need a fixed custom domain: `VERCEL_URL` supplies the active host.
 
-# b) put that URL in .env.local so generated customer links are phone-openable
-#    CLAIMLENS_PUBLIC_BASE_URL=https://<id>.ngrok-free.app
-
-# c) start the app
-npm run dev
-```
-
-- **Laptop:** open `https://<id>.ngrok-free.app/employee` → Basic auth prompt →
-  any username, password = your `EMPLOYEE_ACCESS_TOKEN`.
+- **Laptop:** open `https://<deployment-host>/employee` → redirected to
+  `/employee/login` → enter `EMPLOYEE_USERNAME` and `EMPLOYEE_PASSWORD`.
 - **Phone:** you'll open the private customer link generated in beat 1 below.
 
-> Set `CLAIMLENS_PUBLIC_BASE_URL` **before** creating a claim, or the generated
-> link will point at `localhost` and won't open on the phone.
+> A signed, expiring employee session protects every employee page and API
+> after login, including the hosted reset API. Only `/employee/login`,
+> `/api/employee/login`, and `/api/employee/logout` are reachable without that
+> session.
 
 ---
 

@@ -1,12 +1,12 @@
-import { getEnv } from "@/lib/config/env";
+import { getEnv, requireDeploymentEnv } from "@/lib/config/env";
 import { createNeonDatabase } from "@/lib/db/connection";
 import { applyMigrations } from "@/lib/db/migrations";
 import { loadManifest, seedFromManifest } from "@/lib/footage/manifest";
 
 /** Seed any manifest visits absent from Neon. Run with `npm run seed`. */
 async function main(): Promise<void> {
+  requireDeploymentEnv(process.env);
   const env = getEnv();
-  if (!env.databaseUrl.trim()) throw new Error("DATABASE_URL is required");
   const db = createNeonDatabase(env.databaseUrl);
 
   try {
