@@ -9,9 +9,10 @@ async function main(): Promise<void> {
   if (!env.databaseUrl.trim()) throw new Error("DATABASE_URL is required");
   const db = createNeonDatabase(env.databaseUrl);
   try {
+    // Recover the schema first so reset is safe even on a fresh deployment.
+    await applyMigrations(db);
     await resetClaimLensDatabase(db);
     await new PrivateBlobArtifactStore().deletePrefix("claimlens/");
-    await applyMigrations(db);
     process.stdout.write("ClaimLens database and private artifacts were reset.\n");
   } finally {
     await db.close();

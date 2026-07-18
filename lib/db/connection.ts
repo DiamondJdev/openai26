@@ -51,6 +51,7 @@ export async function createTestDatabase(): Promise<Database> {
   const { Pool } = memory.adapters.createPg();
   const pool = new Pool();
   let eventQueue: Promise<void> = Promise.resolve();
+  let seedQueue: Promise<void> = Promise.resolve();
 
   async function queryEventCte(
     parameters: readonly DatabaseParameter[],
@@ -77,6 +78,32 @@ export async function createTestDatabase(): Promise<Database> {
     return result.rows as Record<string, unknown>[];
   }
 
+  async function querySeedInsert(
+    text: string,
+    parameters: readonly DatabaseParameter[],
+  ): Promise<Record<string, unknown>[]> {
+    const id = parameters[0];
+    if (typeof id !== "string") throw new Error("Invalid seed visit id");
+
+    // pg-mem incorrectly returns a row for `DO NOTHING RETURNING`. Serialize
+    // this test-only path and emulate PostgreSQL's affected-row result.
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const previous = seedQueue;
+    seedQueue = current;
+    await previous;
+    try {
+      const existing = await pool.query("SELECT id FROM visits WHERE id = $1", [id]);
+      if (existing.rows.length > 0) return [];
+      const result = await pool.query(text, [...parameters]);
+      return result.rows as Record<string, unknown>[];
+    } finally {
+      release();
+    }
+  }
+
   return {
     async query<T = Record<string, unknown>>(
       text: string,
@@ -98,6 +125,12 @@ export async function createTestDatabase(): Promise<Database> {
         } finally {
           release();
         }
+      }
+      if (
+        /^\s*INSERT INTO visits\s*\(/i.test(text) &&
+        /ON CONFLICT\s*\(id\)\s*DO NOTHING\s*RETURNING id/i.test(text)
+      ) {
+        return (await querySeedInsert(text, parameters)) as T[];
       }
       const result = await pool.query(text, [...parameters]);
       return result.rows as T[];

@@ -97,16 +97,11 @@ export async function seedFromManifest(
   for (const visit of manifest.visits) {
     const sources = toSources(visit);
     const id = seedVisitId(visit, sources);
-    const existing = await db.query<{ id: string }>(
-      "SELECT id FROM visits WHERE id = $1",
-      [id],
-    );
-    if (existing.length > 0) continue;
-
-    await db.query(
+    const inserted = await db.query<{ id: string }>(
       `INSERT INTO visits (id, plate_normalized, plate_display, vehicle_type, occurred_at, sources)
        VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (id) DO NOTHING`,
+       ON CONFLICT (id) DO NOTHING
+       RETURNING id`,
       [
         id,
         normalizePlate(visit.plate),
@@ -116,7 +111,7 @@ export async function seedFromManifest(
         JSON.stringify(sources),
       ],
     );
-    count += 1;
+    count += inserted.length;
   }
   return count;
 }

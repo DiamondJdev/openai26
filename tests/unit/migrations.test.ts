@@ -46,6 +46,30 @@ describe("ClaimLens migrations", () => {
     await db.close();
   });
 
+  it("counts only the manifest rows it inserts during concurrent seeding", async () => {
+    const db = await createTestDatabase();
+    const manifest: FootageManifest = {
+      visits: [
+        {
+          plate: "TEST-123",
+          vehicleType: "car",
+          occurredAt: "2026-07-18T10:00:00.000Z",
+          sources: {},
+        },
+      ],
+    };
+    await applyMigrations(db);
+
+    const insertedCounts = await Promise.all([
+      seedFromManifest(db, manifest),
+      seedFromManifest(db, manifest),
+    ]);
+
+    expect(insertedCounts.reduce((total, count) => total + count, 0)).toBe(1);
+    expect(await db.query("SELECT id FROM visits")).toHaveLength(1);
+    await db.close();
+  });
+
   it("recovers when a prior bootstrap created schema objects before recording the migration", async () => {
     const db = await createTestDatabase();
     await db.query(
@@ -92,6 +116,18 @@ describe("ClaimLens migrations", () => {
     await applyMigrations(db);
 
     expect(await db.query("SELECT id FROM visits")).toEqual([]);
+    await db.close();
+  });
+
+  it("resets a fresh database by bootstrapping its schema before deleting rows", async () => {
+    const db = await createTestDatabase();
+
+    await resetClaimLensDatabase(db);
+
+    expect(await db.query("SELECT id FROM visits")).toEqual([]);
+    expect(await db.query("SELECT version FROM schema_migrations")).toEqual([
+      { version: "001_initial_claimlens_schema" },
+    ]);
     await db.close();
   });
 });

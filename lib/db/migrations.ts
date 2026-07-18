@@ -67,6 +67,8 @@ export async function applyMigrations(db: Database): Promise<void> {
 
 /** Remove all ClaimLens domain data for an explicit operator reset. */
 export async function resetClaimLensDatabase(db: Database): Promise<void> {
+  await applyMigrations(db);
+
   for (const table of [
     "reports",
     "investigation_events",
