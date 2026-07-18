@@ -1,5 +1,9 @@
 import { neon } from "@neondatabase/serverless";
 import { DataType, newDb } from "pg-mem";
+import {
+  CLAIMLENS_RESET_SQL,
+  CLAIMLENS_RESET_TABLES,
+} from "./migrations";
 
 type DatabaseParameter = string | number | boolean | null;
 
@@ -131,6 +135,14 @@ export async function createTestDatabase(): Promise<Database> {
         /ON CONFLICT\s*\(id\)\s*DO NOTHING\s*RETURNING id/i.test(text)
       ) {
         return (await querySeedInsert(text, parameters)) as T[];
+      }
+      // pg-mem cannot run the production multi-table TRUNCATE. Preserve the
+      // same empty-domain state for tests while Neon receives the exact SQL.
+      if (text.trim() === CLAIMLENS_RESET_SQL) {
+        for (const table of CLAIMLENS_RESET_TABLES) {
+          await pool.query(`DELETE FROM ${table}`);
+        }
+        return [];
       }
       const result = await pool.query(text, [...parameters]);
       return result.rows as T[];

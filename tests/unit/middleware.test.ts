@@ -1,18 +1,23 @@
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it } from "vitest";
 import { config, middleware } from "@/middleware";
+import {
+  EMPLOYEE_COOKIE,
+  createEmployeeToken,
+} from "@/lib/security/employee-session";
 
 const originalUsername = process.env.EMPLOYEE_USERNAME;
 const originalPassword = process.env.EMPLOYEE_PASSWORD;
 
-function request(authorization?: string): NextRequest {
-  return new NextRequest("https://claimlens.example/employee", {
-    headers: authorization ? { authorization } : undefined,
+function request(pathname: string, token?: string): NextRequest {
+  return new NextRequest(`https://claimlens.example${pathname}`, {
+    headers: token ? { cookie: `${EMPLOYEE_COOKIE}=${token}` } : undefined,
   });
 }
 
-function basic(username: string, password: string): string {
-  return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
+function configureCredentials(): void {
+  process.env.EMPLOYEE_USERNAME = "demo";
+  process.env.EMPLOYEE_PASSWORD = "pass";
 }
 
 afterEach(() => {
@@ -22,38 +27,53 @@ afterEach(() => {
   else process.env.EMPLOYEE_PASSWORD = originalPassword;
 });
 
-describe("employee middleware", () => {
-  it("returns a Basic challenge when the authorization header is missing", () => {
-    process.env.EMPLOYEE_USERNAME = "demo";
-    process.env.EMPLOYEE_PASSWORD = "pass";
+describe("employee session middleware", () => {
+  it("redirects an unauthenticated employee page request to login with its destination", async () => {
+    configureCredentials();
 
-    const response = middleware(request());
+    const response = await middleware(request("/employee/claims/demo?tab=events"));
 
-    expect(response.status).toBe(401);
-    expect(response.headers.get("WWW-Authenticate")).toBe(
-      'Basic realm="ClaimLens employee"',
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "https://claimlens.example/employee/login?next=%2Femployee%2Fclaims%2Fdemo%3Ftab%3Devents",
     );
   });
 
-  it("continues for matching Basic credentials", () => {
-    process.env.EMPLOYEE_USERNAME = "demo";
-    process.env.EMPLOYEE_PASSWORD = "pass";
+  it("returns a JSON 401 for the protected employee reset API without a session", async () => {
+    configureCredentials();
 
-    const response = middleware(request(basic("demo", "pass")));
+    const response = await middleware(request("/api/employee/reset"));
 
-    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      success: false,
+      error: "Authentication required.",
+    });
   });
 
-  it("returns a challenge for the wrong username", () => {
-    process.env.EMPLOYEE_USERNAME = "demo";
-    process.env.EMPLOYEE_PASSWORD = "pass";
+  it("allows login and logout endpoints to establish or clear a session", async () => {
+    const login = await middleware(request("/api/employee/login"));
+    const logout = await middleware(request("/api/employee/logout"));
 
-    expect(middleware(request(basic("other", "pass"))).status).toBe(401);
+    expect(login.headers.get("x-middleware-next")).toBe("1");
+    expect(logout.headers.get("x-middleware-next")).toBe("1");
   });
 
-  it("matches only the exact employee route", () => {
-    expect(config.matcher).toEqual(["/employee"]);
-    expect(config.matcher).not.toContain("/employee/claims/one");
-    expect(config.matcher).not.toContain("/api/employee/claims");
+  it("continues employee pages and APIs for a valid session cookie", async () => {
+    configureCredentials();
+    const token = await createEmployeeToken("demo:pass", Date.now());
+
+    const page = await middleware(request("/employee", token));
+    const api = await middleware(request("/api/employee/reset", token));
+
+    expect(page.headers.get("x-middleware-next")).toBe("1");
+    expect(api.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("matches employee pages and APIs", () => {
+    expect(config.matcher).toEqual([
+      "/employee/:path*",
+      "/api/employee/:path*",
+    ]);
   });
 });

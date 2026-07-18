@@ -13,6 +13,25 @@ const MIGRATIONS: readonly Migration[] = [
   },
 ];
 
+/** ClaimLens tables in FK-safe order for a full operator reset. */
+export const CLAIMLENS_RESET_TABLES = [
+  "reports",
+  "investigation_events",
+  "findings",
+  "evidence_crops",
+  "evidence_frames",
+  "uploads",
+  "customer_submissions",
+  "customer_access",
+  "claims",
+  "visits",
+] as const;
+
+/** Postgres-only reset used by the operator command and hosted demo reset. */
+export const CLAIMLENS_RESET_SQL = `TRUNCATE TABLE ${CLAIMLENS_RESET_TABLES.join(
+  ", ",
+)} RESTART IDENTITY CASCADE`;
+
 function isDuplicateSchemaObject(error: unknown): boolean {
   const code =
     typeof error === "object" && error !== null && "code" in error
@@ -68,19 +87,5 @@ export async function applyMigrations(db: Database): Promise<void> {
 /** Remove all ClaimLens domain data for an explicit operator reset. */
 export async function resetClaimLensDatabase(db: Database): Promise<void> {
   await applyMigrations(db);
-
-  for (const table of [
-    "reports",
-    "investigation_events",
-    "findings",
-    "evidence_crops",
-    "evidence_frames",
-    "uploads",
-    "customer_submissions",
-    "customer_access",
-    "claims",
-    "visits",
-  ]) {
-    await db.query(`DELETE FROM ${table}`);
-  }
+  await db.query(CLAIMLENS_RESET_SQL);
 }

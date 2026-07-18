@@ -7,6 +7,7 @@ import { listUploadsByClaim } from "@/lib/db/repositories/uploads";
 import { getReportByClaimId } from "@/lib/db/repositories/reports";
 import { listEventsByClaim } from "@/lib/db/repositories/events";
 import { listCropsByClaim } from "@/lib/db/repositories/evidence";
+import { listFindingsByClaim } from "@/lib/db/repositories/findings";
 
 /** Compact queue row for the employee live queue. */
 export async function claimSummary(ctx: AppContext, claim: Claim) {
@@ -48,6 +49,14 @@ export async function claimDetail(ctx: AppContext, claim: Claim) {
     region: c.region,
     camera: c.camera,
   }));
+  const findings = (await listFindingsByClaim(ctx.db, claim.id)).map((f) => ({
+    id: f.id,
+    camera: f.camera,
+    timestampMs: f.timestampMs,
+    observation: f.observation,
+    region: f.region,
+    damageStatus: f.damageStatus,
+  }));
 
   return {
     id: claim.id,
@@ -77,6 +86,7 @@ export async function claimDetail(ctx: AppContext, claim: Claim) {
     uploads,
     report,
     crops,
+    findings,
     events,
   };
 }

@@ -3,14 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { del, get, list, put } from "@vercel/blob";
 
-const CLAIMLENS_PREFIX = "claimlens/";
-
-function assertClaimLensPath(pathname: string): void {
-  if (!pathname.startsWith(CLAIMLENS_PREFIX)) {
-    throw new Error(`Artifact path must start with ${CLAIMLENS_PREFIX}`);
-  }
-}
-
 export interface ArtifactStore {
   putJpeg(pathname: string, bytes: Buffer): Promise<void>;
   get(pathname: string): Promise<Buffer | null>;
@@ -18,13 +10,13 @@ export interface ArtifactStore {
     pathname: string,
     callback: (localPath: string) => Promise<T> | T,
   ): Promise<T>;
-  deletePrefix(prefix: string): Promise<void>;
+  deletePrefix(prefix: string): Promise<number>;
 }
 
 abstract class BaseArtifactStore implements ArtifactStore {
   abstract putJpeg(pathname: string, bytes: Buffer): Promise<void>;
   abstract get(pathname: string): Promise<Buffer | null>;
-  abstract deletePrefix(prefix: string): Promise<void>;
+  abstract deletePrefix(prefix: string): Promise<number>;
 
   async withLocalFile<T>(
     pathname: string,
@@ -49,12 +41,10 @@ abstract class BaseArtifactStore implements ArtifactStore {
 /** Private Vercel Blob implementation for durable ClaimLens artifacts. */
 export class PrivateBlobArtifactStore extends BaseArtifactStore {
   async putJpeg(pathname: string, bytes: Buffer): Promise<void> {
-    assertClaimLensPath(pathname);
     await put(pathname, bytes, { access: "private", contentType: "image/jpeg" });
   }
 
   async get(pathname: string): Promise<Buffer | null> {
-    assertClaimLensPath(pathname);
     const result = await get(pathname, { access: "private" });
     if (!result || result.statusCode !== 200 || !result.stream) {
       return null;
@@ -63,17 +53,18 @@ export class PrivateBlobArtifactStore extends BaseArtifactStore {
     return Buffer.from(await new Response(result.stream).arrayBuffer());
   }
 
-  async deletePrefix(prefix: string): Promise<void> {
-    assertClaimLensPath(prefix);
-
+  async deletePrefix(prefix: string): Promise<number> {
+    let deleted = 0;
     let cursor: string | undefined;
     do {
       const page = await list({ prefix, cursor });
       if (page.blobs.length > 0) {
         await del(page.blobs.map((blob) => blob.pathname));
+        deleted += page.blobs.length;
       }
       cursor = page.hasMore ? page.cursor : undefined;
     } while (cursor);
+    return deleted;
   }
 }
 
@@ -82,23 +73,23 @@ export class InMemoryArtifactStore extends BaseArtifactStore {
   private readonly artifacts = new Map<string, Buffer>();
 
   async putJpeg(pathname: string, bytes: Buffer): Promise<void> {
-    assertClaimLensPath(pathname);
     this.artifacts.set(pathname, Buffer.from(bytes));
   }
 
   async get(pathname: string): Promise<Buffer | null> {
-    assertClaimLensPath(pathname);
     const bytes = this.artifacts.get(pathname);
     return bytes ? Buffer.from(bytes) : null;
   }
 
-  async deletePrefix(prefix: string): Promise<void> {
-    assertClaimLensPath(prefix);
+  async deletePrefix(prefix: string): Promise<number> {
+    let deleted = 0;
     for (const pathname of this.artifacts.keys()) {
       if (pathname.startsWith(prefix)) {
         this.artifacts.delete(pathname);
+        deleted += 1;
       }
     }
+    return deleted;
   }
 }
 

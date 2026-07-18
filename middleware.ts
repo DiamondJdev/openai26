@@ -1,52 +1,51 @@
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  EMPLOYEE_COOKIE,
+  employeeSecret,
+  verifyEmployeeToken,
+} from "@/lib/security/employee-session";
 
 /**
- * Gate the employee landing page with the server-only Basic Auth credentials.
- * Nested employee routes and APIs deliberately do not match this middleware.
+ * Gate the employee console (pages and APIs) behind a signed session cookie.
+ * Unauthenticated page requests are sent to the themed login page; API requests
+ * get a JSON 401 so client fetches surface a clean error instead of HTML.
  */
 export const config = {
-  matcher: ["/employee"],
+  matcher: ["/employee/:path*", "/api/employee/:path*"],
 };
 
-function constantTimeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+// Routes reachable without a session: the login page and its auth endpoints.
+const PUBLIC_PATHS = new Set([
+  "/employee/login",
+  "/api/employee/login",
+  "/api/employee/logout",
+]);
+
+function unauthenticated(req: NextRequest): NextResponse {
+  if (req.nextUrl.pathname.startsWith("/api/")) {
+    return NextResponse.json(
+      { success: false, error: "Authentication required." },
+      { status: 401 },
+    );
   }
-  return diff === 0;
+  const loginUrl = new URL("/employee/login", req.url);
+  loginUrl.searchParams.set("next", req.nextUrl.pathname + req.nextUrl.search);
+  return NextResponse.redirect(loginUrl);
 }
 
-function unauthorized(): NextResponse {
-  return new NextResponse("Authentication required.", {
-    status: 401,
-    headers: { "WWW-Authenticate": 'Basic realm="ClaimLens employee"' },
-  });
-}
-
-export function middleware(req: NextRequest): NextResponse {
-  const username = process.env.EMPLOYEE_USERNAME ?? "";
-  const password = process.env.EMPLOYEE_PASSWORD ?? "";
-
-  const header = req.headers.get("authorization") ?? "";
-  const basic = /^Basic ([^\s]+)$/.exec(header);
-  if (!basic) return unauthorized();
-  const encoded = basic[1];
-  if (!encoded) return unauthorized();
-
-  let decoded = "";
-  try {
-    decoded = atob(encoded);
-  } catch {
-    return unauthorized();
+export async function middleware(req: NextRequest): Promise<NextResponse> {
+  if (PUBLIC_PATHS.has(req.nextUrl.pathname)) {
+    return NextResponse.next();
   }
-  const separator = decoded.indexOf(":");
-  if (separator < 0) return unauthorized();
 
-  const suppliedUsername = decoded.slice(0, separator);
-  const suppliedPassword = decoded.slice(separator + 1);
-  const usernameMatches = constantTimeEqual(suppliedUsername, username);
-  const passwordMatches = constantTimeEqual(suppliedPassword, password);
-  if (!usernameMatches || !passwordMatches) return unauthorized();
+  const secret = employeeSecret();
+  if (!secret) return unauthenticated(req);
+
+  const token = req.cookies.get(EMPLOYEE_COOKIE)?.value;
+  if (!token) return unauthenticated(req);
+
+  const valid = await verifyEmployeeToken(token, secret, Date.now());
+  if (!valid) return unauthenticated(req);
+
   return NextResponse.next();
 }

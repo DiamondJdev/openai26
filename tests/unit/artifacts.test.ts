@@ -2,11 +2,15 @@ import { createInMemoryArtifactStore } from "@/lib/storage/artifacts";
 import { describe, expect, it } from "vitest";
 
 describe("artifact store", () => {
-  it("rejects Blob paths outside the ClaimLens prefix", async () => {
+  it("preserves artifacts outside the prefix selected for deletion", async () => {
     const artifacts = createInMemoryArtifactStore();
 
-    await expect(artifacts.putJpeg("other/image.jpg", Buffer.from("x")))
-      .rejects.toThrow("claimlens/");
+    await artifacts.putJpeg("other/image.jpg", Buffer.from("x"));
+    await artifacts.deletePrefix("claimlens/");
+
+    await expect(artifacts.get("other/image.jpg")).resolves.toEqual(
+      Buffer.from("x"),
+    );
   });
 
   it("stores artifacts, materializes a temporary local file, and deletes a prefix", async () => {

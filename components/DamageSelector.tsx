@@ -2,6 +2,7 @@
 
 import { DAMAGE_REGIONS, REGION_META, type DamageRegion } from "@/lib/domain/regions";
 import { VEHICLE_TYPES, type VehicleType } from "@/lib/domain/vehicle";
+import { OVERLINE } from "@/components/ui";
 
 interface Box {
   x: number;
@@ -26,6 +27,15 @@ function layout(vehicle: VehicleType): Record<DamageRegion, Box> {
   };
 }
 
+/** The narrow side rails read better with rotated labels. */
+function labelTransform(region: DamageRegion, b: Box): string | undefined {
+  const cx = b.x + b.w / 2;
+  const cy = b.y + b.h / 2;
+  if (region === "driver_side") return `rotate(-90 ${cx} ${cy})`;
+  if (region === "passenger_side") return `rotate(90 ${cx} ${cy})`;
+  return undefined;
+}
+
 export interface DamageSelectorProps {
   vehicleType: VehicleType;
   selected: readonly DamageRegion[];
@@ -47,7 +57,7 @@ export function DamageSelector({
   return (
     <div className="space-y-4">
       <fieldset>
-        <legend className="mb-2 text-sm font-medium text-muted">Vehicle type</legend>
+        <legend className={`mb-2 ${OVERLINE}`}>Vehicle type</legend>
         <div role="radiogroup" aria-label="Vehicle type" className="flex gap-2">
           {VEHICLE_TYPES.map((v) => (
             <button
@@ -57,10 +67,10 @@ export function DamageSelector({
               aria-checked={vehicleType === v}
               disabled={disabled}
               onClick={() => onVehicleTypeChange(v)}
-              className={`min-h-touch rounded-lg border px-4 py-2 capitalize ${
+              className={`min-h-touch rounded-md border px-4 py-2 capitalize transition-colors ${
                 vehicleType === v
-                  ? "border-accent bg-accent-weak text-fg"
-                  : "border-border text-muted"
+                  ? "border-fg bg-accent-weak font-medium text-fg"
+                  : "border-border text-muted hover:border-muted hover:text-fg"
               }`}
             >
               {v}
@@ -70,12 +80,12 @@ export function DamageSelector({
       </fieldset>
 
       <fieldset>
-        <legend className="mb-2 text-sm font-medium text-muted">
-          Reported damage areas (select all that apply)
+        <legend className={`mb-2 ${OVERLINE}`}>
+          Reported areas (select all that apply)
         </legend>
         <svg
           viewBox="0 0 220 400"
-          className="mx-auto block h-auto w-full max-w-[280px]"
+          className="mx-auto block h-auto w-full max-w-[300px]"
           role="group"
           aria-label={`${vehicleType} damage area diagram`}
         >
@@ -97,24 +107,27 @@ export function DamageSelector({
                     onToggle(region);
                   }
                 }}
-                className="cursor-pointer outline-none focus-visible:[&>rect]:stroke-accent"
+                className="cursor-pointer outline-none [&:hover>rect]:stroke-muted focus-visible:[&>rect]:stroke-signal"
               >
                 <rect
                   x={b.x}
                   y={b.y}
                   width={b.w}
                   height={b.h}
-                  rx={6}
+                  rx={3}
                   fill={isOn ? "var(--color-accent-weak)" : "var(--color-surface-2)"}
-                  stroke={isOn ? "var(--color-accent)" : "var(--color-border)"}
-                  strokeWidth={isOn ? 2.5 : 1}
+                  stroke={isOn ? "var(--color-fg)" : "var(--color-border)"}
+                  strokeWidth={isOn ? 2 : 1}
+                  className="transition-colors"
                 />
                 <text
                   x={b.x + b.w / 2}
                   y={b.y + b.h / 2}
                   textAnchor="middle"
                   dominantBaseline="middle"
-                  fontSize={9}
+                  transform={labelTransform(region, b)}
+                  fontSize={10}
+                  fontWeight={isOn ? 600 : 500}
                   fill={isOn ? "var(--color-fg)" : "var(--color-muted)"}
                 >
                   {REGION_META[region].label}
@@ -125,11 +138,22 @@ export function DamageSelector({
         </svg>
       </fieldset>
 
-      <p aria-live="polite" className="text-sm text-muted">
-        {selected.length === 0
-          ? "No areas selected yet."
-          : `Selected: ${selected.map((r) => REGION_META[r].label).join(", ")}`}
-      </p>
+      <div aria-live="polite">
+        {selected.length === 0 ? (
+          <p className="text-sm text-muted">No areas selected yet.</p>
+        ) : (
+          <ul aria-label="Selected areas" className="flex flex-wrap gap-1.5">
+            {selected.map((r) => (
+              <li
+                key={r}
+                className="rounded border border-border bg-accent-weak px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wide"
+              >
+                {REGION_META[r].label}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

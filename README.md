@@ -49,7 +49,8 @@ npm run seed     # idempotently seed manifest visits into Neon
 
 Set `CLAIMLENS_PUBLIC_BASE_URL` to the deployed app URL so generated customer
 links are reachable. Employee access is configured with `EMPLOYEE_USERNAME` and
-`EMPLOYEE_PASSWORD`.
+`EMPLOYEE_PASSWORD`; `/employee` redirects authorized staff to the sign-in page
+and the signed session protects employee APIs as well.
 
 ## Test & verify
 
