@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiGet, apiPost, apiPostForm } from "@/lib/client/api";
+import {
+  compressCustomerImage,
+  ImageCompressionError,
+} from "@/lib/client/image-compression";
 import { BrandMark } from "@/components/BrandMark";
 import { BTN_PRIMARY, OVERLINE } from "@/components/ui";
 
@@ -204,16 +208,19 @@ function PhotoField({
   kind,
   label,
   index,
-  onCapturedChange,
+  onCompressedFileChange,
 }: {
   kind: string;
   label: string;
   index: number;
-  onCapturedChange: (kind: string, captured: boolean) => void;
+  onCompressedFileChange: (kind: string, file: File | null) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const selectionRef = useRef(0);
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [compressing, setCompressing] = useState(false);
+  const [compressionError, setCompressionError] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -221,24 +228,44 @@ function PhotoField({
     };
   }, [preview]);
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) {
-      setPreview((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return null;
-      });
-      setFileName(null);
-      onCapturedChange(kind, false);
-      return;
-    }
-    const url = URL.createObjectURL(file);
+  function clearCapturedFile() {
     setPreview((prev) => {
       if (prev) URL.revokeObjectURL(prev);
-      return url;
+      return null;
     });
-    setFileName(file.name);
-    onCapturedChange(kind, true);
+    setFileName(null);
+    onCompressedFileChange(kind, null);
+  }
+
+  async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    const selection = selectionRef.current + 1;
+    selectionRef.current = selection;
+    setCompressionError(null);
+    clearCapturedFile();
+    if (!file) {
+      setCompressing(false);
+      return;
+    }
+    setCompressing(true);
+    try {
+      const compressed = await compressCustomerImage(file);
+      if (selection !== selectionRef.current) return;
+      setPreview(URL.createObjectURL(compressed));
+      setFileName(compressed.name);
+      onCompressedFileChange(kind, compressed);
+    } catch (error) {
+      if (selection !== selectionRef.current) return;
+      input.value = "";
+      setCompressionError(
+        error instanceof ImageCompressionError
+          ? error.message
+          : "That photo could not be compressed. Please retake it.",
+      );
+    } finally {
+      if (selection === selectionRef.current) setCompressing(false);
+    }
   }
 
   return (
@@ -253,7 +280,15 @@ function PhotoField({
         onChange={handleChange}
         className="sr-only"
       />
-      {preview ? (
+      {compressing ? (
+        <div
+          className="flex items-center gap-3 rounded-lg border border-border bg-surface-2 p-3 text-sm text-muted"
+          aria-live="polite"
+        >
+          <span className="h-3 w-3 animate-pulse rounded-full bg-signal" />
+          Compressing your photo…
+        </div>
+      ) : preview ? (
         <div className="flex items-center gap-3 rounded-lg border border-success/40 bg-success-weak p-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -269,7 +304,10 @@ function PhotoField({
           </div>
           <button
             type="button"
-            onClick={() => inputRef.current?.click()}
+            onClick={() => {
+              setCompressionError(null);
+              inputRef.current?.click();
+            }}
             className="shrink-0 rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium transition-colors hover:bg-surface-2"
           >
             Retake
@@ -294,6 +332,11 @@ function PhotoField({
             <CameraIcon />
           </span>
         </button>
+      )}
+      {compressionError && (
+        <p className="mt-1 text-xs text-danger" role="alert">
+          {compressionError}
+        </p>
       )}
     </div>
   );
@@ -362,12 +405,16 @@ function IntakeForm({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [consent, setConsent] = useState(false);
-  const [captured, setCaptured] = useState<Record<string, boolean>>({});
+  const [compressedFiles, setCompressedFiles] = useState<Record<string, File>>(
+    {},
+  );
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
-  const capturedCount = UPLOAD_FIELDS.filter((f) => captured[f.kind]).length;
+  const capturedCount = UPLOAD_FIELDS.filter(
+    (f) => compressedFiles[f.kind],
+  ).length;
   const errors = {
     name: name.trim() ? "" : "Enter your full name.",
     email: EMAIL_RE.test(email) ? "" : "Enter a valid email.",
@@ -380,8 +427,12 @@ function IntakeForm({
     capturedCount === UPLOAD_FIELDS.length &&
     consent;
 
-  function markCaptured(kind: string, isCaptured: boolean) {
-    setCaptured((prev) => ({ ...prev, [kind]: isCaptured }));
+  function setCompressedFile(kind: string, file: File | null) {
+    setCompressedFiles((current) => {
+      if (file) return { ...current, [kind]: file };
+      const { [kind]: _removed, ...remaining } = current;
+      return remaining;
+    });
   }
 
   function showError(field: keyof typeof errors): string | undefined {
@@ -398,6 +449,11 @@ function IntakeForm({
     try {
       const form = new FormData(formRef.current);
       form.set("consent", "true");
+      for (const field of UPLOAD_FIELDS) {
+        const file = compressedFiles[field.kind];
+        if (!file) return;
+        form.set(field.kind, file);
+      }
       const data = await apiPostForm<{ view: CustomerView }>(
         "/api/customer/claim/intake",
         form,
@@ -475,7 +531,7 @@ function IntakeForm({
             kind={f.kind}
             label={f.label}
             index={i + 1}
-            onCapturedChange={markCaptured}
+            onCompressedFileChange={setCompressedFile}
           />
         ))}
       </fieldset>
