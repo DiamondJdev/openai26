@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * ClaimLens design tokens — "the claim file."
+ *
+ * Light, institutional paper-and-ink surfaces for the claim file itself; dark
+ * evidence wells wherever footage and the live investigation appear; safety
+ * orange reserved strictly for damage findings and waiting-on-you states.
+ * One source of truth shared by Tailwind (tailwind.config.ts) and raw CSS.
+ * Text colors meet WCAG AA on their intended surfaces.
+ */
+:root {
+  /* The file: paper, sheets, ink. */
+  --color-bg: #f4f4f1;
+  --color-surface: #ffffff;
+  --color-surface-2: #ecede8;
+  --color-border: #dedfda;
+  --color-fg: #191c21;
+  --color-muted: #575d66;
+
+  /* Interactive ink — primary actions, links, selected states. */
+  --color-accent: #191c21;
+  --color-accent-hover: #333a44;
+  --color-accent-fg: #ffffff;
+  --color-accent-weak: rgba(25, 28, 33, 0.07);
+
+  /* Signal orange: damage findings and needs-your-attention. Nothing else. */
+  --color-signal: #e8590c;
+  --color-signal-strong: #bc4708; /* AA for small text on paper/sheet. */
+  --color-signal-weak: rgba(232, 89, 12, 0.1);
+  --color-signal-bright: #f97316; /* AA on the dark well. */
+
+  /* Outcomes. */
+  --color-success: #2e7d46;
+  --color-success-weak: rgba(46, 125, 70, 0.1);
+  --color-warning: #9a6700;
+  --color-warning-weak: rgba(212, 158, 64, 0.16);
+  --color-danger: #c92a2a;
+  --color-danger-weak: rgba(201, 42, 42, 0.08);
+
+  /* Evidence wells: dark insets for footage, frames, and the live ledger. */
+  --color-well: #14171c;
+  --color-well-fg: #e9ebef;
+  --color-well-muted: #9ba3af;
+  --color-well-line: rgba(233, 235, 239, 0.14);
+  --color-well-surface: rgba(233, 235, 239, 0.05);
+
+  /* Fallback stacks; next/font variables on <html> override these. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  /* 16px minimum body text (mobile a11y requirement). */
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Native controls pick up ink instead of vendor blue. */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--color-fg);
+}
+
+::selection {
+  background: rgba(232, 89, 12, 0.22);
+}
+
+/* Visible focus for keyboard users everywhere: ink ring on light surfaces… */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-fg);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* …and a light ring inside dark evidence wells. */
+.well :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline-color: var(--color-well-fg);
+}
+
+/* Respect reduced-motion preference. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Screen-reader-only utility for live announcements and labels. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

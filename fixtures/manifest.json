@@ -1,0 +1,25 @@
+{
+  "footageRoot": "footage",
+  "visits": [
+    {
+      "plate": "7GAB991",
+      "vehicleType": "car",
+      "occurredAt": "2026-07-18T10:32:00.000Z",
+      "sources": {
+        "entrance": { "file": "demo-clean/entrance.png", "kind": "image" },
+        "mid_tunnel": { "file": "demo-clean/mid.png", "kind": "image" },
+        "exit": { "file": "demo-clean/exit.png", "kind": "image" }
+      }
+    },
+    {
+      "plate": "8XYZ204",
+      "vehicleType": "pickup",
+      "occurredAt": "2026-07-18T11:05:00.000Z",
+      "sources": {
+        "entrance": { "file": "demo-damage/entrance.png", "kind": "image" },
+        "mid_tunnel": { "file": "demo-damage/mid.png", "kind": "image" },
+        "exit": { "file": "demo-damage/exit.png", "kind": "image" }
+      }
+    }
+  ]
+}
