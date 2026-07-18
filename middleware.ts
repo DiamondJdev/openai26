@@ -1,14 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
- * Optional gate for the employee console + APIs. The plan treats employee access
- * as trusted local access with no accounts, so this is OFF by default. But the
- * moment the app is tunneled (e.g. ngrok) to reach the customer `/c/*` link, the
- * employee routes become reachable too — set EMPLOYEE_ACCESS_TOKEN to require
- * HTTP Basic auth (any username, password = the token) on those routes.
+ * Gate the employee landing page with the server-only Basic Auth credentials.
+ * Nested employee routes and APIs deliberately do not match this middleware.
  */
 export const config = {
-  matcher: ["/employee/:path*", "/api/employee/:path*"],
+  matcher: ["/employee"],
 };
 
 function constantTimeEqual(a: string, b: string): boolean {
@@ -28,12 +25,14 @@ function unauthorized(): NextResponse {
 }
 
 export function middleware(req: NextRequest): NextResponse {
-  const token = process.env.EMPLOYEE_ACCESS_TOKEN;
-  if (!token) return NextResponse.next(); // local trusted default
+  const username = process.env.EMPLOYEE_USERNAME ?? "";
+  const password = process.env.EMPLOYEE_PASSWORD ?? "";
 
   const header = req.headers.get("authorization") ?? "";
-  const [scheme, encoded] = header.split(" ");
-  if (scheme !== "Basic" || !encoded) return unauthorized();
+  const basic = /^Basic ([^\s]+)$/.exec(header);
+  if (!basic) return unauthorized();
+  const encoded = basic[1];
+  if (!encoded) return unauthorized();
 
   let decoded = "";
   try {
@@ -41,7 +40,13 @@ export function middleware(req: NextRequest): NextResponse {
   } catch {
     return unauthorized();
   }
-  const password = decoded.slice(decoded.indexOf(":") + 1);
-  if (!constantTimeEqual(password, token)) return unauthorized();
+  const separator = decoded.indexOf(":");
+  if (separator < 0) return unauthorized();
+
+  const suppliedUsername = decoded.slice(0, separator);
+  const suppliedPassword = decoded.slice(separator + 1);
+  const usernameMatches = constantTimeEqual(suppliedUsername, username);
+  const passwordMatches = constantTimeEqual(suppliedPassword, password);
+  if (!usernameMatches || !passwordMatches) return unauthorized();
   return NextResponse.next();
 }

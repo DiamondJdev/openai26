@@ -57,6 +57,7 @@ export async function buildAppHarness(
       openAiApiKey: "",
       model: "gpt-5.6",
       publicBaseUrl: "http://localhost:3000",
+      databaseUrl: "",
       dataDir: paths.root,
       dbPath: paths.db,
       manifestPath: "",

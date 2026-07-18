@@ -1,3 +1,7 @@
+import { requireDeploymentEnv } from "./lib/config/deployment-env.ts";
+
+requireDeploymentEnv(process.env);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,

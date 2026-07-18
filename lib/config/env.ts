@@ -1,4 +1,7 @@
 import { INVESTIGATION_LIMITS } from "./constants";
+import { resolvePublicBaseUrl } from "./deployment-env";
+
+export { requireDeploymentEnv, resolvePublicBaseUrl } from "./deployment-env";
 
 function readInt(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -16,8 +19,8 @@ export function getEnv() {
   return {
     openAiApiKey: process.env.OPENAI_API_KEY ?? "",
     model: process.env.CLAIMLENS_MODEL ?? "gpt-5.6",
-    publicBaseUrl:
-      process.env.CLAIMLENS_PUBLIC_BASE_URL ?? "http://localhost:3000",
+    publicBaseUrl: resolvePublicBaseUrl(process.env),
+    databaseUrl: process.env.DATABASE_URL ?? "",
     dataDir: process.env.CLAIMLENS_DATA_DIR ?? ".data",
     dbPath: process.env.CLAIMLENS_DB_PATH ?? "",
     manifestPath: process.env.CLAIMLENS_MANIFEST_PATH ?? "fixtures/manifest.json",
